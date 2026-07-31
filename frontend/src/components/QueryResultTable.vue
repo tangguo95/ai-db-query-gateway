@@ -32,9 +32,9 @@ function bytesText(bytes?: number): string {
 <template>
   <section class="result-block">
     <div v-if="!resultAvailable" class="result-unavailable">
-      <span>结果未保留</span>
-      <h3>查询结果未持久化，无法从历史请求恢复</h3>
-      <p>网关只在原始执行响应中返回结果。这里仅能确认查询已执行，不能据此判断结果集为空。</p>
+      <span>结果暂不可查看</span>
+      <h3>查询结果已从临时缓存中清除</h3>
+      <p>结果只在执行响应和网关进程内短时保留，不写入历史记录。这里仅能确认查询已执行，不能据此判断结果集为空。</p>
     </div>
     <template v-else>
       <header class="result-telemetry">

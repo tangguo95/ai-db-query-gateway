@@ -33,10 +33,13 @@ import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.Duration;
 import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -57,6 +60,8 @@ public class QueryService {
     private static final int RESPONSE_ENVELOPE_RESERVE_BYTES = 64 * 1024;
     private static final int MAX_RESULT_COLUMNS = 512;
     private static final int MAX_METADATA_TEXT_BYTES = 4096;
+    private static final int MAX_RECENT_RESULTS = 20;
+    private static final Duration RECENT_RESULT_TTL = Duration.ofMinutes(15);
     private static final Set<String> PARAMETER_TYPES = Set.of(
             "STRING",
             "VARCHAR",
@@ -87,6 +92,10 @@ public class QueryService {
     private final ConcurrentHashMap<String, Semaphore> dataSourceSemaphores = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, PreparedStatement> runningStatements = new ConcurrentHashMap<>();
     private final Set<String> cancelledQueries = ConcurrentHashMap.newKeySet();
+    /**
+     * 查询结果只在进程内短暂保留，便于管理员从审计轨迹回看刚执行的结果；不写入 SQLite、日志或审计密文。
+     */
+    private final Map<String, RecentResult> recentResults = new LinkedHashMap<>(32, .75f, true);
 
     public QueryService(
             DataSourceService dataSourceService,
@@ -362,6 +371,15 @@ public class QueryService {
         return view(query, null);
     }
 
+    public QueryView getResultForAudit(String queryId) {
+        if (actorContext.actorType() != ActorType.ADMIN) {
+            throw new GatewayException(HttpStatus.FORBIDDEN, "ADMIN_REQUIRED", "仅网页管理员可查看审计查询结果");
+        }
+        StoredQuery query = queryRepository.require(queryId);
+        // 审计查看只对网页管理员开放；允许在这里解密原始 SQL，便于把结果与审批内容对应起来。
+        return view(query, recentResult(queryId), true);
+    }
+
     public List<QueryView> list(QueryStatus status, int limit) {
         if (actorContext.actorType() != ActorType.ADMIN) {
             throw new GatewayException(HttpStatus.FORBIDDEN, "ADMIN_REQUIRED", "仅管理员可查看查询列表");
@@ -592,6 +610,7 @@ public class QueryService {
                         result.rowCount(),
                         result.byteCount(),
                         null));
+                rememberResult(query.id(), result);
                 return result;
             } finally {
                 runningStatements.remove(query.id());
@@ -1064,8 +1083,14 @@ public class QueryService {
     }
 
     private QueryView view(StoredQuery query, QueryResult result) {
+        return view(query, result, false);
+    }
+
+    private QueryView view(StoredQuery query, QueryResult result, boolean includeRequestPayloadForAdmin) {
         boolean includeRequestPayload =
-                query.status() == QueryStatus.PENDING_APPROVAL || query.status() == QueryStatus.APPROVED;
+                includeRequestPayloadForAdmin
+                        || query.status() == QueryStatus.PENDING_APPROVAL
+                        || query.status() == QueryStatus.APPROVED;
         String sql = includeRequestPayload ? crypto.decrypt(query.sqlCipher()) : null;
         List<QueryParameter> parameters = includeRequestPayload
                 ? readParameters(crypto.decrypt(query.parametersCipher()))
@@ -1084,6 +1109,32 @@ public class QueryService {
                 parameters,
                 result);
     }
+
+    private synchronized void rememberResult(String queryId, QueryResult result) {
+        evictExpiredResults();
+        recentResults.put(queryId, new RecentResult(Instant.now().plus(RECENT_RESULT_TTL), result));
+        while (recentResults.size() > MAX_RECENT_RESULTS) {
+            Iterator<String> iterator = recentResults.keySet().iterator();
+            if (!iterator.hasNext()) {
+                break;
+            }
+            iterator.next();
+            iterator.remove();
+        }
+    }
+
+    private synchronized QueryResult recentResult(String queryId) {
+        evictExpiredResults();
+        RecentResult cached = recentResults.get(queryId);
+        return cached == null ? null : cached.result();
+    }
+
+    private void evictExpiredResults() {
+        Instant now = Instant.now();
+        recentResults.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
+    }
+
+    private record RecentResult(Instant expiresAt, QueryResult result) {}
 
     private String writeJson(Object value) {
         try {

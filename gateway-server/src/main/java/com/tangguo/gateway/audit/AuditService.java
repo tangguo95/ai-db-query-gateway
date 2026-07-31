@@ -20,6 +20,8 @@ import tools.jackson.databind.ObjectMapper;
 public class AuditService {
     private static final String GENESIS_HMAC = "GENESIS";
     private static final String FIELD_SEPARATOR = "\u001f";
+    private static final List<String> APPROVAL_EVENTS = List.of(
+            "QUERY_PENDING_APPROVAL", "QUERY_APPROVAL_REQUESTED", "QUERY_APPROVED");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -171,15 +173,20 @@ public class AuditService {
         List<String> predicates = new ArrayList<>();
         List<Object> arguments = new ArrayList<>();
         if (normalizedEventType != null) {
-            predicates.add("event_type LIKE ? ESCAPE '\\'");
-            arguments.add(escapeLike(normalizedEventType) + "%");
+            if ("APPROVAL".equals(normalizedEventType)) {
+                predicates.add("a.event_type IN (?, ?, ?)");
+                arguments.addAll(APPROVAL_EVENTS);
+            } else {
+                predicates.add("a.event_type LIKE ? ESCAPE '\\'");
+                arguments.add(escapeLike(normalizedEventType) + "%");
+            }
         }
         if (normalizedStatus != null) {
-            predicates.add("status = ?");
+            predicates.add("a.status = ?");
             arguments.add(normalizedStatus);
         }
         if (normalizedQueryId != null) {
-            predicates.add("query_id = ?");
+            predicates.add("a.query_id = ?");
             arguments.add(normalizedQueryId);
         }
         String where = predicates.isEmpty() ? "" : " WHERE " + String.join(" AND ", predicates);
@@ -188,10 +195,12 @@ public class AuditService {
         pageArguments.add(safePage * safeSize);
         List<AuditView> items = jdbcTemplate.query(
                 """
-                SELECT sequence_no, event_id, occurred_at, actor, actor_type, event_type,
-                       data_source_id, query_id, purpose, sql_fingerprint, status, duration_ms,
-                       row_count, byte_count, error_code
-                  FROM audit_event
+                SELECT a.sequence_no, a.event_id, a.occurred_at, a.actor, a.actor_type, a.event_type,
+                       a.data_source_id, COALESCE(ds.name, a.data_source_id) AS data_source_name,
+                       a.query_id, a.purpose, a.sql_fingerprint, a.status, a.duration_ms,
+                       a.row_count, a.byte_count, a.error_code
+                  FROM audit_event a
+                  LEFT JOIN data_source_config ds ON ds.id = a.data_source_id
                 """
                         + where
                         + " ORDER BY sequence_no DESC LIMIT ? OFFSET ?",
@@ -203,6 +212,7 @@ public class AuditService {
                         resultSet.getString("actor_type"),
                         resultSet.getString("event_type"),
                         resultSet.getString("data_source_id"),
+                        resultSet.getString("data_source_name"),
                         resultSet.getString("query_id"),
                         resultSet.getString("purpose"),
                         resultSet.getString("sql_fingerprint"),
@@ -214,7 +224,7 @@ public class AuditService {
                         chainValid),
                 pageArguments.toArray());
         Long totalValue = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM audit_event" + where,
+                "SELECT COUNT(*) FROM audit_event a LEFT JOIN data_source_config ds ON ds.id = a.data_source_id" + where,
                 Long.class,
                 arguments.toArray());
         long total = totalValue == null ? 0 : totalValue;

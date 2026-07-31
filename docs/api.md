@@ -21,13 +21,14 @@
 | `POST` | `/api/queries/preview` | 服务端 AST 预检，不创建请求、不连接业务库 |
 | `POST` | `/api/queries` | 提交并按策略执行/待审批 |
 | `GET` | `/api/queries/{queryId}` | 查看状态 |
+| `GET` | `/api/queries/{queryId}/result` | 管理员查看近期执行结果（仅进程内短时缓存） |
 | `POST` | `/api/queries/{queryId}/approve` | 一次性批准 AI 风险查询 |
 | `POST` | `/api/queries/{queryId}/execute` | 消费批准 |
 | `POST` | `/api/queries/{queryId}/cancel` | 取消 |
 | `GET/POST` | `/api/tokens` | 列表/签发最小作用域 Token |
 | `PUT` | `/api/tokens/{id}/scope` | 调整有效 Token 的数据源范围，原 Token 不变 |
 | `DELETE` | `/api/tokens/{id}` | 吊销 Token |
-| `GET` | `/api/audits` | 分页查看审计轨迹，可按事件前缀、状态和 queryId 筛选 |
+| `GET` | `/api/audits` | 分页查看审计轨迹，可按事件前缀、状态和 queryId 筛选；`eventType=APPROVAL` 仅看审批相关记录 |
 
 网页写请求必须带从 `XSRF-TOKEN` cookie 读取的 `X-XSRF-TOKEN` header。响应统一
 `Cache-Control: no-store`，错误体包含稳定的 `code`，不会返回底层 JDBC 异常。
@@ -93,6 +94,10 @@ Schema、表、风险原因、数据源只读等级、参数数量、SQL 指纹�
 
 AI 风险查询先返回 `PENDING_APPROVAL`，不含结果。管理员批准后，原 Token 在五分钟内
 调用 execute；批准只能消费一次。
+
+网页管理员还可以通过 `GET /api/queries/{queryId}/result` 从审计轨迹回看最近执行结果。
+该接口只读取内存中的短时缓存（最多 20 条、15 分钟），不会从 SQLite 或审计记录恢复结果；
+缓存不存在时响应仍会返回查询状态和“结果暂不可查看”标识。
 
 ## 不存在的能力
 

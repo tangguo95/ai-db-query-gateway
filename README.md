@@ -33,8 +33,9 @@ addresses and passwords into every AI conversation with one local security bound
   locks, file operations, database links, recursive CTEs, and unsupported functions.
 - Enforces bounded rows, response bytes, field bytes, timeouts, concurrency, rate limits,
   one-time approvals, cancellation, and rollback.
-- Keeps query results in the current request only. Results are not written to SQLite,
-  audit records, ordinary logs, CSV files, or Excel files.
+- Never writes query results to SQLite, audit records, ordinary logs, CSV files, or Excel files.
+  For administrator review, the service keeps at most 20 recent results in process memory for
+  up to 15 minutes; they disappear on restart or expiry.
 
 ## Read-only boundary
 

@@ -18,6 +18,7 @@ const labels: Record<string, string> = {
   BLOCKED: '已阻断',
   UNKNOWN: '待检测',
   REQUESTED: '已申请',
+  EXECUTING: '执行中',
   EXECUTED: '已执行',
   PENDING_APPROVAL: '待审批',
   APPROVED: '已批准',
@@ -28,7 +29,8 @@ const labels: Record<string, string> = {
   ACTIVE: '有效',
   REVOKED: '已吊销',
   SUCCESS: '成功',
-  WARNING: '警告'
+  WARNING: '警告',
+  TIMED_OUT: '已超时'
 }
 </script>
 

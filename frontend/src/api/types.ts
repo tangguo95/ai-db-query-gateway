@@ -143,6 +143,7 @@ export interface AuditRecord {
   eventType?: string
   action?: string
   actor?: string
+  actorType?: string
   subject?: string
   dataSourceName?: string
   dataSourceId?: string

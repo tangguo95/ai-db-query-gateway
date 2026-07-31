@@ -13,6 +13,8 @@ const pendingCount = ref(0)
 const pendingQueries = ref<QueryResponse[]>([])
 const queueLoading = ref(false)
 const queueError = ref('')
+const batchApproving = ref(false)
+const selectedIds = ref<string[]>([])
 const queryIdInput = ref('')
 const query = ref<QueryResponse | null>(null)
 const loading = ref(false)
@@ -37,6 +39,10 @@ const approvalPayloadComplete = computed(() =>
   && Array.isArray(query.value?.parameters)
   && typeof query.value?.effectiveMaxRows === 'number'
 )
+const allSelected = computed(() =>
+  pendingQueries.value.length > 0
+  && pendingQueries.value.every((item) => selectedIds.value.includes(item.queryId))
+)
 
 async function loadDashboard() {
   try {
@@ -53,10 +59,68 @@ async function loadPending() {
   try {
     const response = await api.queries({ status: 'PENDING_APPROVAL', limit: 100 })
     pendingQueries.value = response.items
+    const availableIds = new Set(response.items.map((item) => item.queryId))
+    selectedIds.value = selectedIds.value.filter((id) => availableIds.has(id))
   } catch (cause) {
     queueError.value = errorMessage(cause)
   } finally {
     queueLoading.value = false
+  }
+}
+
+function toggleSelection(queryId: string, checked: boolean) {
+  if (checked) {
+    if (!selectedIds.value.includes(queryId)) selectedIds.value.push(queryId)
+    return
+  }
+  selectedIds.value = selectedIds.value.filter((id) => id !== queryId)
+}
+
+function toggleAll(checked: boolean) {
+  selectedIds.value = checked ? pendingQueries.value.map((item) => item.queryId) : []
+}
+
+function onSelectionChange(event: Event, queryId: string) {
+  const target = event.target
+  if (target instanceof HTMLInputElement) toggleSelection(queryId, target.checked)
+}
+
+function onSelectAllChange(event: Event) {
+  const target = event.target
+  if (target instanceof HTMLInputElement) toggleAll(target.checked)
+}
+
+async function batchApprove() {
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  try {
+    await ElMessageBox.confirm(
+      `将一次性批准 ${ids.length} 条查询申请。每条许可仍只绑定自身 SQL、参数和数据源，并分别写入审计记录。`,
+      '确认批量批准',
+      {
+        confirmButtonText: '确认批准',
+        cancelButtonText: '返回复核',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+
+  batchApproving.value = true
+  try {
+    const results = await Promise.allSettled(ids.map((id) => api.approveQuery(id)))
+    const successCount = results.filter((result) => result.status === 'fulfilled').length
+    const failureCount = results.length - successCount
+    selectedIds.value = []
+    await refreshPendingState()
+    if (failureCount) {
+      ElMessage.warning(`已批准 ${successCount} 条，${failureCount} 条未能批准，请展开失败记录复核`)
+    } else {
+      ElMessage.success(`已批量批准 ${successCount} 条查询申请`)
+    }
+  } finally {
+    batchApproving.value = false
   }
 }
 
@@ -208,7 +272,7 @@ onBeforeUnmount(() => {
     <header class="page-heading">
       <div>
         <p class="eyebrow">人工审批 / 一次性放行</p>
-        <h1 class="page-title">审批信号舱</h1>
+        <h1 class="page-title">待审批查询</h1>
         <p class="page-subtitle">人工批准不是永久白名单。许可严格绑定本次请求，过期或消费后无法再次执行。</p>
       </div>
       <div class="pending-counter">
@@ -220,7 +284,7 @@ onBeforeUnmount(() => {
     <section class="panel queue-panel">
       <header class="panel-header">
         <div>
-          <p class="panel-title">待审批队列</p>
+          <p class="panel-title">待审批列表</p>
           <span class="panel-code">待审批 / 最多显示 100 条</span>
         </div>
         <el-button plain size="small" :loading="queueLoading" @click="refreshPendingState">刷新队列</el-button>
@@ -237,15 +301,46 @@ onBeforeUnmount(() => {
         当前没有等待人工放行的查询
       </div>
       <div v-else class="queue-list" role="list" aria-label="待审批查询">
+        <div class="queue-toolbar">
+          <label class="select-all-control">
+            <input
+              type="checkbox"
+              :checked="allSelected"
+              :disabled="loading || approving || batchApproving || executing || cancelling"
+              @change="onSelectAllChange"
+            />
+            <span>全选当前 {{ pendingQueries.length }} 条</span>
+          </label>
+          <span class="selection-count">已选择 {{ selectedIds.length }} 条</span>
+          <el-button
+            type="primary"
+            plain
+            size="small"
+            :loading="batchApproving"
+            :disabled="!selectedIds.length || loading || approving || executing || cancelling"
+            @click="batchApprove"
+          >
+            批量批准
+          </el-button>
+        </div>
         <button
           v-for="item in pendingQueries"
           :key="item.queryId"
           type="button"
           role="listitem"
           :class="{ selected: query?.queryId === item.queryId }"
-          :disabled="loading || approving || executing || cancelling"
+          :disabled="loading || approving || batchApproving || executing || cancelling"
           @click="resolveQuery(item.queryId)"
         >
+          <span class="queue-check" @click.stop>
+            <input
+              type="checkbox"
+              :checked="selectedIds.includes(item.queryId)"
+              :disabled="loading || approving || batchApproving || executing || cancelling"
+              :aria-label="`选择查询 ${item.queryId}`"
+              @change="onSelectionChange($event, item.queryId)"
+            />
+          </span>
           <span class="queue-id">{{ item.queryId }}</span>
           <strong>{{ item.purpose || '未提供用途' }}</strong>
           <span>{{ item.dataSourceName || item.dataSourceId || '未知数据源' }}</span>
@@ -260,7 +355,7 @@ onBeforeUnmount(() => {
     <section class="panel resolver-panel">
       <header class="panel-header">
         <div>
-          <p class="panel-title">定位查询申请</p>
+          <p class="panel-title">查询申请详情</p>
           <span class="panel-code">查询申请 ID</span>
         </div>
       </header>
@@ -272,7 +367,7 @@ onBeforeUnmount(() => {
           clearable
           @keyup.enter="resolveQuery()"
         />
-        <el-button type="primary" :loading="loading" @click="resolveQuery()">载入审批信号</el-button>
+        <el-button type="primary" :loading="loading" @click="resolveQuery()">查看查询申请</el-button>
       </div>
     </section>
 
@@ -288,7 +383,7 @@ onBeforeUnmount(() => {
       <header class="approval-header">
         <div>
           <p class="eyebrow">查询申请 / {{ query.queryId }}</p>
-          <h2>生产只读查询放行复核</h2>
+          <h2>查询审批详情</h2>
         </div>
         <div class="approval-state">
           <StateChip :value="query.status" />
@@ -411,9 +506,9 @@ onBeforeUnmount(() => {
       </footer>
 
       <div v-if="query.status === 'EXECUTED' && query.resultAvailable === false" class="result-not-retained">
-        <span>结果未保留</span>
-        <h3>查询结果未持久化，无法恢复</h3>
-        <p>这里只能确认该申请已经执行，不能据此判断结果集为空。结果仅存在于最初的执行响应中。</p>
+        <span>结果暂不可查看</span>
+        <h3>查询结果已从临时缓存中清除</h3>
+        <p>这里只能确认该申请已经执行，不能据此判断结果集为空。结果不写入历史记录，缓存过期或服务重启后不会恢复。</p>
       </div>
       <QueryResultTable v-else-if="query.status === 'EXECUTED'" :result="query" />
     </section>
@@ -495,10 +590,52 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 
+.queue-toolbar {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fffefa;
+}
+
+.select-all-control,
+.selection-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font: 13px/1 var(--font-mono);
+}
+
+.selection-count {
+  color: var(--amber);
+}
+
+.queue-toolbar .el-button {
+  margin-left: auto;
+}
+
+.queue-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+}
+
+.queue-check input,
+.select-all-control input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--amber);
+  cursor: pointer;
+}
+
 .queue-list button {
   display: grid;
   min-height: 54px;
-  grid-template-columns: minmax(150px, 1.2fr) minmax(180px, 1.5fr) minmax(120px, 1fr) 70px 72px 145px 20px;
+  grid-template-columns: 30px minmax(150px, 1.2fr) minmax(180px, 1.5fr) minmax(120px, 1fr) 70px 72px 145px 20px;
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
@@ -534,6 +671,11 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.queue-list button > .queue-check {
+  overflow: visible;
+  padding: 0;
 }
 
 .queue-list strong {
@@ -943,7 +1085,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 820px) {
   .queue-list button {
-    min-width: 760px;
+    min-width: 790px;
   }
 
   .queue-list {

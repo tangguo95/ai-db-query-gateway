@@ -46,6 +46,11 @@ public class QueryController {
         return queryService.get(id);
     }
 
+    @GetMapping("/{id}/result")
+    QueryView result(@PathVariable String id) {
+        return queryService.getResultForAudit(id);
+    }
+
     @PostMapping("/{id}/approve")
     QueryView approve(@PathVariable String id) {
         return queryService.approve(id);

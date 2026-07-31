@@ -192,7 +192,9 @@ function auditRecord(raw: JsonRecord): AuditRecord {
     timestamp: raw.occurredAt,
     eventType: raw.eventType,
     actor: raw.actor,
+    actorType: raw.actorType,
     dataSourceId: raw.dataSourceId,
+    dataSourceName: raw.dataSourceName,
     queryId: raw.queryId,
     status: raw.status,
     purpose: raw.purpose,
@@ -290,6 +292,8 @@ export const api = {
   },
   query: async (id: string) =>
     queryResponse(await request<JsonRecord>(`/api/queries/${encodeURIComponent(id)}`)),
+  queryResult: async (id: string) =>
+    queryResponse(await request<JsonRecord>(`/api/queries/${encodeURIComponent(id)}/result`)),
   approveQuery: async (id: string) =>
     queryResponse(await request<JsonRecord>(`/api/queries/${encodeURIComponent(id)}/approve`, {
       method: 'POST',

@@ -180,6 +180,7 @@ public final class ApiDtos {
             String actorType,
             String eventType,
             String dataSourceId,
+            String dataSourceName,
             String queryId,
             String purpose,
             String sqlFingerprint,

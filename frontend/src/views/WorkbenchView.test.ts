@@ -292,7 +292,7 @@ describe('WorkbenchView guarded query flow', () => {
     await wrapper.get('[data-testid="submit-query"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('查询结果未持久化，无法从历史请求恢复')
+    expect(wrapper.text()).toContain('查询结果已从临时缓存中清除')
     expect(wrapper.text()).not.toContain('本次响应中的结果集为空')
   })
 })
