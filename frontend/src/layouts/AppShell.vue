@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { api } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
@@ -8,7 +9,11 @@ const router = useRouter()
 const auth = useAuthStore()
 const clock = ref(new Date())
 const mobileOpen = ref(false)
+const pendingApprovalCount = ref<number | null>(null)
 let clockTimer: number | undefined
+let approvalTimer: number | undefined
+
+const APPROVAL_REFRESH_INTERVAL = 15_000
 
 const navigation = [
   { to: '/dashboard', code: '01', label: '总览', short: '总览' },
@@ -28,6 +33,22 @@ const timeText = computed(() => new Intl.DateTimeFormat('zh-CN', {
   second: '2-digit'
 }).format(clock.value))
 
+const pendingApprovalLabel = computed(() => {
+  const count = pendingApprovalCount.value ?? 0
+  return count > 99 ? '99+' : String(count)
+})
+
+async function refreshPendingApprovalCount() {
+  if (!auth.authenticated) return
+  try {
+    const dashboard = await api.dashboard()
+    pendingApprovalCount.value = dashboard.pendingApprovalCount
+  } catch {
+    // 全局提示不能阻塞当前页面；下一次轮询继续尝试，401 仍由 API 客户端统一处理。
+    pendingApprovalCount.value = null
+  }
+}
+
 async function logout() {
   await auth.logout()
   await router.replace({ name: 'login' })
@@ -35,10 +56,19 @@ async function logout() {
 
 onMounted(() => {
   clockTimer = window.setInterval(() => { clock.value = new Date() }, 1000)
+  void refreshPendingApprovalCount()
+  approvalTimer = window.setInterval(() => {
+    void refreshPendingApprovalCount()
+  }, APPROVAL_REFRESH_INTERVAL)
 })
 
 onBeforeUnmount(() => {
   if (clockTimer) window.clearInterval(clockTimer)
+  if (approvalTimer) window.clearInterval(approvalTimer)
+})
+
+watch(() => route.path, (path) => {
+  if (path.startsWith('/approvals')) void refreshPendingApprovalCount()
 })
 </script>
 
@@ -62,10 +92,18 @@ onBeforeUnmount(() => {
           v-for="item in navigation"
           :key="item.to"
           :to="item.to"
+          :class="{ 'approval-nav-link': item.to === '/approvals' && pendingApprovalCount !== null && pendingApprovalCount > 0 }"
           @click="mobileOpen = false"
         >
           <span class="nav-code">{{ item.code }}</span>
-          <span>{{ item.label }}</span>
+          <span class="nav-label">{{ item.label }}</span>
+          <span
+            v-if="item.to === '/approvals' && pendingApprovalCount !== null && pendingApprovalCount > 0"
+            class="nav-badge"
+            :aria-label="`${pendingApprovalCount} 条待审批查询`"
+          >
+            {{ pendingApprovalLabel }}
+          </span>
           <i />
         </RouterLink>
       </nav>
@@ -87,6 +125,18 @@ onBeforeUnmount(() => {
           <span>只读查询网关 / 系统</span>
           <strong>{{ activeCode }}</strong>
         </div>
+        <RouterLink
+          v-if="pendingApprovalCount !== null && pendingApprovalCount > 0"
+          class="approval-alert"
+          to="/approvals"
+          aria-live="polite"
+          :aria-label="`${pendingApprovalCount} 条待审批查询，点击查看`"
+        >
+          <span class="approval-alert-mark"><i /></span>
+          <strong>{{ pendingApprovalLabel }}</strong>
+          <span>条待审批查询</span>
+          <small>立即处理 →</small>
+        </RouterLink>
         <div class="telemetry">
           <span><i class="live-dot" />安全策略正常</span>
           <span>本机服务 / 运行正常</span>
@@ -176,7 +226,7 @@ onBeforeUnmount(() => {
   position: relative;
   display: grid;
   min-height: 45px;
-  grid-template-columns: 31px 1fr 10px;
+  grid-template-columns: 31px minmax(0, 1fr) auto 10px;
   align-items: center;
   color: #53645e;
   font: 600 15px/1 var(--font-display);
@@ -211,10 +261,49 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-badge {
+  display: inline-grid;
+  min-width: 24px;
+  height: 21px;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  padding: 0 6px;
+  border: 1px solid #c47a20;
+  border-radius: 3px;
+  color: #8b4f0b;
+  background: #fff5e4;
+  box-shadow: 0 0 0 3px rgba(196, 122, 32, .08);
+  font: 700 12px/1 var(--font-mono);
+  animation: approval-badge-pulse 2.8s ease-in-out infinite;
+}
+
+.navigation a.approval-nav-link {
+  color: #8b4f0b;
+  background: #fff9ef;
+}
+
+.navigation a.approval-nav-link:hover {
+  color: #70410a;
+  background: #fff1d9;
+}
+
+.navigation a.approval-nav-link .nav-code {
+  color: #a85f0d;
+}
+
 .navigation a i {
   width: 4px;
   height: 4px;
   border: 1px solid #48534f;
+  grid-column: 4;
   transform: rotate(45deg);
 }
 
@@ -297,6 +386,56 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
+.approval-alert {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid #d7a158;
+  color: #70410a;
+  background: #fff8eb;
+  box-shadow: inset 3px 0 0 #c47a20;
+  font: 13px/1 var(--font-mono);
+  text-decoration: none;
+  transition: border-color .18s ease, background .18s ease, transform .18s ease;
+}
+
+.approval-alert:hover {
+  border-color: #b8731d;
+  background: #fff0d6;
+  transform: translateY(-1px);
+}
+
+.approval-alert-mark {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid #c47a20;
+  border-radius: 50%;
+}
+
+.approval-alert-mark i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #c47a20;
+  box-shadow: 0 0 0 3px rgba(196, 122, 32, .13);
+  animation: approval-dot-pulse 1.8s ease-in-out infinite;
+}
+
+.approval-alert strong {
+  font-size: 14px;
+}
+
+.approval-alert small {
+  margin-left: 4px;
+  color: #a85f0d;
+  font-size: 12px;
+}
+
 .telemetry {
   display: flex;
   gap: 22px;
@@ -318,6 +457,28 @@ onBeforeUnmount(() => {
   width: min(1460px, 100%);
   margin: 0 auto;
   padding: 36px clamp(20px, 3vw, 44px) 64px;
+}
+
+@keyframes approval-badge-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(196, 122, 32, .08);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(196, 122, 32, .14);
+  }
+}
+
+@keyframes approval-dot-pulse {
+  0%,
+  100% {
+    opacity: .72;
+    transform: scale(.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 .page-enter-active,
@@ -390,6 +551,14 @@ onBeforeUnmount(() => {
     padding-left: 60px;
   }
 
+  .approval-alert {
+    margin-left: 12px;
+  }
+
+  .approval-alert small {
+    display: none;
+  }
+
   .telemetry span:nth-child(2) {
     display: none;
   }
@@ -402,6 +571,27 @@ onBeforeUnmount(() => {
 
   .telemetry span:first-child {
     display: none;
+  }
+
+  .breadcrumb > span {
+    display: none;
+  }
+
+  .approval-alert {
+    margin-left: auto;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-badge,
+  .approval-alert-mark i {
+    animation: none;
+  }
+
+  .approval-alert {
+    transition: none;
   }
 }
 </style>
