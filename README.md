@@ -150,8 +150,11 @@ parameterized `SELECT` with a short purpose, for example:
 ```
 
 Risky requests (for example `SELECT *`, system schemas, multiple schemas, more than three
-tables, or more than 200 rows) are returned as pending approval. Approve them in the web
-console before the one-time execute call.
+tables, or more than 200 rows) are returned as pending approval by default. The administrator
+can turn on **免审批执行** in 网页的“安全设置”；this only skips the one-time web approval
+for high-risk AI requests. The AST read-only policy, data-source scope, timeout, concurrency,
+row limit and response-size limit remain enforced. The switch applies to newly submitted
+requests; existing pending requests keep their current state.
 
 ## Limits and security notes
 

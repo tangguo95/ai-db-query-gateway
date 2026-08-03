@@ -189,34 +189,36 @@ onMounted(load)
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .metric {
   position: relative;
   min-height: 146px;
   overflow: hidden;
-  padding: 18px;
+  padding: 20px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--bg-panel);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+  transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
 
 .metric::after {
-  position: absolute;
-  right: -25px;
-  bottom: -35px;
-  width: 100px;
-  height: 70px;
-  content: "";
-  border: 1px solid #cbd5cf;
-  transform: rotate(-32deg);
+  display: none;
+}
+
+.metric:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
+  transform: translateY(-1px);
 }
 
 .metric-code {
   color: var(--text-dim);
-  font:  14px/1 var(--font-mono);
-  letter-spacing: .14em;
+  font: 500 12px/1 var(--font-display);
+  letter-spacing: 0;
 }
 
 .metric div {
@@ -224,8 +226,8 @@ onMounted(load)
 }
 
 .metric strong {
-  color: #15231f;
-  font: 650 37px/.9 var(--font-mono);
+  color: var(--text);
+  font: 700 34px/.9 var(--font-mono);
 }
 
 .metric small {
@@ -244,8 +246,8 @@ onMounted(load)
   position: absolute;
   right: 17px;
   top: 17px;
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #607169;
 }
@@ -268,8 +270,8 @@ onMounted(load)
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1.12fr .88fr;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 .health-number {
@@ -288,15 +290,15 @@ onMounted(load)
 .radar {
   position: relative;
   display: grid;
-  width: 190px;
-  height: 190px;
+  width: 176px;
+  height: 176px;
   margin: auto;
   place-content: center;
   overflow: hidden;
-  border: 1px solid #b8cac1;
+  border: 1px solid #bfdbfe;
   border-radius: 50%;
   color: var(--green);
-  background: radial-gradient(circle, rgba(65, 214, 163, .08), transparent 60%);
+  background: radial-gradient(circle, rgba(37, 99, 235, .08), transparent 62%);
   text-align: center;
 }
 
@@ -321,7 +323,7 @@ onMounted(load)
 
 .radar-ring {
   inset: 27px;
-  border: 1px solid rgba(65, 214, 163, .13);
+  border: 1px solid rgba(37, 99, 235, .14);
   border-radius: 50%;
 }
 
@@ -333,14 +335,14 @@ onMounted(load)
   top: 50%;
   right: 0;
   left: 0;
-  border-top: 1px solid rgba(65, 214, 163, .12);
+  border-top: 1px solid rgba(37, 99, 235, .12);
 }
 
 .radar-cross.cross-b {
   top: 0;
   bottom: 0;
   left: 50%;
-  border-left: 1px solid rgba(65, 214, 163, .12);
+  border-left: 1px solid rgba(37, 99, 235, .12);
 }
 
 .radar-sweep {
@@ -348,9 +350,10 @@ onMounted(load)
   left: 50%;
   width: 84px;
   height: 1px;
-  background: linear-gradient(90deg, var(--green), transparent);
+  background: linear-gradient(90deg, var(--blue), transparent);
   transform-origin: left center;
-  animation: sweep 5s linear infinite;
+  opacity: .45;
+  transform: rotate(-18deg);
 }
 
 @keyframes sweep {
@@ -465,7 +468,7 @@ onMounted(load)
 }
 
 .quick-panel {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 
 .quick-grid {
@@ -476,12 +479,13 @@ onMounted(load)
 .quick-grid button {
   position: relative;
   display: grid;
-  min-height: 120px;
+  min-height: 112px;
   grid-template-columns: 28px 1fr;
   grid-template-rows: auto auto;
   align-content: center;
   gap: 4px 9px;
   padding: 20px;
+  border-radius: 0;
   border: 0;
   border-right: 1px solid var(--line);
   color: var(--text);
@@ -496,13 +500,13 @@ onMounted(load)
 }
 
 .quick-grid button:hover {
-  background: rgba(65, 214, 163, .05);
+  background: #f8fafc;
 }
 
 .quick-grid button > span {
   grid-row: span 2;
-  color: var(--green);
-  font:  14px/1.5 var(--font-mono);
+  color: var(--blue);
+  font: 600 12px/1.5 var(--font-mono);
 }
 
 .quick-grid button strong {

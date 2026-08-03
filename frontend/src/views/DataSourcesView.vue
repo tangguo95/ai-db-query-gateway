@@ -936,4 +936,56 @@ dd {
     grid-column: 1;
   }
 }
+
+/* 数据源列表使用清晰的表格式卡片，突出状态和操作，不使用装饰性边框。 */
+.status-bar {
+  gap: 28px;
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .02);
+}
+
+.source-panel {
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.source-card {
+  min-height: 164px;
+  grid-template-columns: 62px 1fr 170px;
+  transition: background .18s ease;
+}
+
+.source-card:hover {
+  background: #fbfdff;
+}
+
+.source-index {
+  color: #94a3b8;
+  background: #f8fafc;
+}
+
+.source-main {
+  padding: 20px 22px;
+}
+
+.source-main h2 {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.source-action {
+  padding: 18px;
+  background: #fcfdff;
+}
+
+.action-grid :deep(.el-button) {
+  border-radius: 6px;
+}
+
+.dialog-note,
+.redaction-note,
+.edit-risk {
+  border-radius: 6px;
+}
 </style>

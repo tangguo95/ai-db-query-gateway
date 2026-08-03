@@ -40,6 +40,7 @@ class QueryResultBudgetTest {
                 mock(AuditService.class),
                 mock(ActorContext.class),
                 new GatewayProperties(),
+                mock(QueryApprovalPolicyService.class),
                 new ObjectMapper());
     }
 

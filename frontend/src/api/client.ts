@@ -8,6 +8,7 @@ import type {
   DataSourceSummary,
   ListResponse,
   QueryPreviewResponse,
+  QueryApprovalPolicy,
   QueryRequest,
   QueryResponse,
   SetupStatus,
@@ -223,6 +224,13 @@ export const api = {
   currentUser: () => request<CurrentUser>('/api/auth/me'),
 
   dashboard: async () => dashboard(await request<JsonRecord>('/api/dashboard')),
+
+  queryApprovalPolicy: () => request<QueryApprovalPolicy>('/api/settings/query-approval'),
+  updateQueryApprovalPolicy: (approvalRequired: boolean) =>
+    request<QueryApprovalPolicy>('/api/settings/query-approval', {
+      method: 'PUT',
+      body: JSON.stringify({ approvalRequired })
+    }),
 
   dataSources: async () => {
     const payload = await request<JsonRecord[] | ListResponse<JsonRecord>>('/api/datasources')

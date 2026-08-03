@@ -1039,4 +1039,49 @@ onMounted(async () => {
     grid-column: 1 / -1;
   }
 }
+
+.source-alert {
+  border-radius: var(--radius);
+  background: #fff7ed;
+}
+
+.workbench-grid {
+  gap: 16px;
+}
+
+.editor-panel,
+.request-panel,
+.risk-panel,
+.parameter-panel,
+.execution-panel {
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.editor-wrap {
+  background: #fff;
+}
+
+.editor-footer {
+  background: #f8fafc;
+  font-size: 12px;
+}
+
+.server-object-groups span,
+.object-list span {
+  border-radius: 5px;
+  border-color: var(--line);
+  background: #f8fafc;
+}
+
+.approval-signal {
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: linear-gradient(90deg, #fff7ed, #fff);
+}
+
+.signal-mark {
+  border-radius: 10px;
+  background: #fff7ed;
+  transform: none;
+}
 </style>

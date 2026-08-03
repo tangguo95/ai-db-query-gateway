@@ -118,6 +118,18 @@ class AuditServiceTest {
     }
 
     @Test
+    void includesAutoApprovedRiskQueriesInApprovalFilter() {
+        auditService.record(AuditCommand.simple(
+                "token:codex", ActorType.API_TOKEN, "QUERY_POLICY_AUTO_APPROVED", "APPROVED", Map.of()));
+
+        var page = auditService.findPage(0, 50, "approval", null, null);
+
+        assertThat(page.total()).isEqualTo(1);
+        assertThat(page.items()).singleElement()
+                .satisfies(item -> assertThat(item.eventType()).isEqualTo("QUERY_POLICY_AUTO_APPROVED"));
+    }
+
+    @Test
     void rejectsMalformedAuditFilters() {
         assertThatThrownBy(() -> auditService.findPage(0, 50, "QUERY%", null, null))
                 .isInstanceOfSatisfying(

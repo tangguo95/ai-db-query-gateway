@@ -21,7 +21,10 @@ public class AuditService {
     private static final String GENESIS_HMAC = "GENESIS";
     private static final String FIELD_SEPARATOR = "\u001f";
     private static final List<String> APPROVAL_EVENTS = List.of(
-            "QUERY_PENDING_APPROVAL", "QUERY_APPROVAL_REQUESTED", "QUERY_APPROVED");
+            "QUERY_PENDING_APPROVAL",
+            "QUERY_APPROVAL_REQUESTED",
+            "QUERY_APPROVED",
+            "QUERY_POLICY_AUTO_APPROVED");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -174,7 +177,7 @@ public class AuditService {
         List<Object> arguments = new ArrayList<>();
         if (normalizedEventType != null) {
             if ("APPROVAL".equals(normalizedEventType)) {
-                predicates.add("a.event_type IN (?, ?, ?)");
+                predicates.add("a.event_type IN (?, ?, ?, ?)");
                 arguments.addAll(APPROVAL_EVENTS);
             } else {
                 predicates.add("a.event_type LIKE ? ESCAPE '\\'");

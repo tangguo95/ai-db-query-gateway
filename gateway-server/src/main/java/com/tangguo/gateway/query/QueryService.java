@@ -87,6 +87,7 @@ public class QueryService {
     private final AuditService auditService;
     private final ActorContext actorContext;
     private final GatewayProperties properties;
+    private final QueryApprovalPolicyService approvalPolicy;
     private final ObjectMapper objectMapper;
     private final Semaphore globalSemaphore;
     private final ConcurrentHashMap<String, Semaphore> dataSourceSemaphores = new ConcurrentHashMap<>();
@@ -107,6 +108,7 @@ public class QueryService {
             AuditService auditService,
             ActorContext actorContext,
             GatewayProperties properties,
+            QueryApprovalPolicyService approvalPolicy,
             ObjectMapper objectMapper) {
         this.dataSourceService = dataSourceService;
         this.connections = connections;
@@ -117,6 +119,7 @@ public class QueryService {
         this.auditService = auditService;
         this.actorContext = actorContext;
         this.properties = properties;
+        this.approvalPolicy = approvalPolicy;
         this.objectMapper = objectMapper;
         this.globalSemaphore = new Semaphore(properties.getQuery().getGlobalConcurrency(), true);
     }
@@ -286,7 +289,9 @@ public class QueryService {
             throw exception;
         }
 
-        boolean approvalRequired = actorType == ActorType.API_TOKEN && !analysis.riskReasons().isEmpty();
+        boolean highRiskApiQuery = actorType == ActorType.API_TOKEN && !analysis.riskReasons().isEmpty();
+        boolean approvalRequired = highRiskApiQuery && approvalPolicy.approvalRequired();
+        boolean approvalBypassed = highRiskApiQuery && !approvalRequired;
         QueryStatus initialStatus = approvalRequired ? QueryStatus.PENDING_APPROVAL : QueryStatus.APPROVED;
         Instant now = Instant.now();
         StoredQuery stored = new StoredQuery(
@@ -312,7 +317,9 @@ public class QueryService {
         auditService.record(new AuditCommand(
                 actor,
                 actorType,
-                approvalRequired ? "QUERY_PENDING_APPROVAL" : "QUERY_POLICY_APPROVED",
+                approvalRequired
+                        ? "QUERY_PENDING_APPROVAL"
+                        : approvalBypassed ? "QUERY_POLICY_AUTO_APPROVED" : "QUERY_POLICY_APPROVED",
                 dataSource.id(),
                 queryId,
                 request.purpose(),
@@ -325,7 +332,11 @@ public class QueryService {
                         "riskReasons",
                         analysis.riskReasons(),
                         "readOnlyStatus",
-                        dataSource.readOnlyStatus().name()),
+                        dataSource.readOnlyStatus().name(),
+                        "approvalRequired",
+                        approvalRequired,
+                        "approvalBypassed",
+                        approvalBypassed),
                 approvalRequired ? "PENDING_APPROVAL" : "APPROVED",
                 null,
                 null,

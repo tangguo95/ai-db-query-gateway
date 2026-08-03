@@ -69,6 +69,10 @@ public class GatewayProperties {
         private int globalConcurrency = 4;
         private int perDataSourceConcurrency = 2;
         private Duration approvalTtl = Duration.ofMinutes(5);
+        /**
+         * 高风险 AI 查询是否默认进入网页审批队列；数据库中的管理员开关可覆盖这个默认值。
+         */
+        private boolean approvalRequired = true;
 
         public int getDefaultMaxRows() {
             return defaultMaxRows;
@@ -132,6 +136,14 @@ public class GatewayProperties {
 
         public void setApprovalTtl(Duration approvalTtl) {
             this.approvalTtl = approvalTtl;
+        }
+
+        public boolean isApprovalRequired() {
+            return approvalRequired;
+        }
+
+        public void setApprovalRequired(boolean approvalRequired) {
+            this.approvalRequired = approvalRequired;
         }
     }
 

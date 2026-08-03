@@ -1133,4 +1133,39 @@ onBeforeUnmount(() => {
     grid-template-columns: 34px 90px minmax(0, 1fr);
   }
 }
+
+/* 审批队列使用高可读的待处理卡片，状态色只承担提示作用。 */
+.approval-card {
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.approval-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, .05);
+}
+
+.approval-stripe {
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+}
+
+.guidance {
+  border-radius: var(--radius);
+  background: #fff;
+}
+
+.guidance-mark {
+  width: 62px;
+  height: 62px;
+  border-radius: 10px;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  transform: none;
+}
+
+.guidance-mark span {
+  color: var(--blue);
+  transform: none;
+}
 </style>

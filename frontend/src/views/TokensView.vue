@@ -692,4 +692,72 @@ onMounted(load)
     grid-template-columns: 1fr;
   }
 }
+
+/* 令牌页采用更接近管理台的平面卡片布局，保留原有信息密度和操作入口。 */
+.token-warning {
+  border-radius: var(--radius);
+  background: #fffbeb;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .02);
+}
+
+.warning-mark {
+  border-radius: 6px;
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.token-panel {
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.token-list article {
+  min-height: 136px;
+  grid-template-columns: 76px 1fr 128px;
+  transition: background .18s ease;
+}
+
+.token-list article:hover {
+  background: #fbfdff;
+}
+
+.token-symbol {
+  border-right: 0;
+  background: #f8fafc;
+}
+
+.token-symbol span {
+  padding: 10px 7px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: var(--blue);
+  background: #eff6ff;
+  transform: none;
+}
+
+.token-symbol i {
+  width: 5px;
+  height: 5px;
+  background: var(--blue);
+  box-shadow: none;
+}
+
+.token-main {
+  padding: 20px 22px;
+}
+
+.token-main h2 {
+  font-size: 16px;
+}
+
+.token-action {
+  padding: 18px;
+  border-left: 1px solid var(--line);
+  background: #fcfdff;
+}
+
+.raw-token code {
+  border-radius: 6px;
+  background: #f8fafc;
+}
 </style>

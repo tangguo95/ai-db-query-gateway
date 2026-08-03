@@ -48,9 +48,10 @@ REQUESTED（审计先写）
    ├─ 网页管理员普通执行 ─> APPROVED -> EXECUTING
    └─ AI 查询
        ├─ 无风险 ─────────> APPROVED -> EXECUTING
-       └─ 有风险 ─────────> PENDING_APPROVAL
+       └─ 有风险 ──审批开启──> PENDING_APPROVAL
                                 ├─ 超时/拒绝 ───> EXPIRED / REJECTED
                                 └─ 一次性批准 ─> APPROVED -> EXECUTING
+                   \─审批关闭──> APPROVED -> EXECUTING（审计记录免审批放行）
 
 EXECUTING ──> EXECUTED | FAILED | TIMED_OUT | CANCELLED
 ```

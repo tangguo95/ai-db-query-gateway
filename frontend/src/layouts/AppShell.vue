@@ -3,10 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import NavIcon from '../components/NavIcon.vue'
+import { useTheme } from '../theme'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const { theme, toggleTheme } = useTheme()
 const clock = ref(new Date())
 const mobileOpen = ref(false)
 const pendingApprovalCount = ref<number | null>(null)
@@ -15,17 +18,34 @@ let approvalTimer: number | undefined
 
 const APPROVAL_REFRESH_INTERVAL = 15_000
 
-const navigation = [
-  { to: '/dashboard', code: '01', label: '总览', short: '总览' },
-  { to: '/datasources', code: '02', label: '数据源', short: '数据源' },
-  { to: '/workbench', code: '03', label: 'SQL 工作台', short: '工作台' },
-  { to: '/approvals', code: '04', label: '待审批', short: '审批' },
-  { to: '/audits', code: '05', label: '审计轨迹', short: '审计' },
-  { to: '/tokens', code: '06', label: '访问令牌', short: '令牌' },
-  { to: '/security', code: '07', label: '安全设置', short: '安全' }
+const navigationGroups = [
+  {
+    label: '工作台',
+    items: [
+      { to: '/dashboard', code: '01', label: '总览', icon: 'home' },
+      { to: '/workbench', code: '03', label: 'SQL 工作台', icon: 'terminal' }
+    ]
+  },
+  {
+    label: '资源管理',
+    items: [
+      { to: '/datasources', code: '02', label: '数据源', icon: 'database' },
+      { to: '/tokens', code: '06', label: '访问令牌', icon: 'key' }
+    ]
+  },
+  {
+    label: '安全与审计',
+    items: [
+      { to: '/approvals', code: '04', label: '待审批', icon: 'check' },
+      { to: '/audits', code: '05', label: '审计轨迹', icon: 'audit' },
+      { to: '/security', code: '07', label: '安全设置', icon: 'shield' }
+    ]
+  }
 ]
 
-const activeCode = computed(() => navigation.find((item) => route.path.startsWith(item.to))?.code ?? '00')
+const navigation = navigationGroups.flatMap((group) => group.items)
+
+const activeLabel = computed(() => navigation.find((item) => route.path.startsWith(item.to))?.label ?? '页面')
 const timeText = computed(() => new Intl.DateTimeFormat('zh-CN', {
   hour12: false,
   hour: '2-digit',
@@ -80,39 +100,45 @@ watch(() => route.path, (path) => {
 
     <aside class="sidebar" :class="{ open: mobileOpen }">
       <div class="brand">
-        <div class="brand-symbol"><span>查</span><span>询</span></div>
+        <div class="brand-symbol" aria-hidden="true"><NavIcon name="database" /></div>
         <div>
-          <strong>只读查询网关</strong>
-          <small>生产数据查询控制台</small>
+          <strong>查询网关</strong>
+          <small>只读数据控制台</small>
         </div>
       </div>
 
       <nav class="navigation" aria-label="主导航">
-        <RouterLink
-          v-for="item in navigation"
-          :key="item.to"
-          :to="item.to"
-          :class="{ 'approval-nav-link': item.to === '/approvals' && pendingApprovalCount !== null && pendingApprovalCount > 0 }"
-          @click="mobileOpen = false"
-        >
-          <span class="nav-code">{{ item.code }}</span>
-          <span class="nav-label">{{ item.label }}</span>
-          <span
-            v-if="item.to === '/approvals' && pendingApprovalCount !== null && pendingApprovalCount > 0"
-            class="nav-badge"
-            :aria-label="`${pendingApprovalCount} 条待审批查询`"
+        <section v-for="group in navigationGroups" :key="group.label" class="nav-group">
+          <h2>{{ group.label }}</h2>
+          <RouterLink
+            v-for="item in group.items"
+            :key="item.to"
+            :to="item.to"
+            :class="{ 'approval-nav-link': item.to === '/approvals' && pendingApprovalCount !== null && pendingApprovalCount > 0 }"
+            @click="mobileOpen = false"
           >
-            {{ pendingApprovalLabel }}
-          </span>
-          <i />
-        </RouterLink>
+            <NavIcon :name="item.icon" />
+            <span class="nav-label">{{ item.label }}</span>
+            <span
+              v-if="item.to === '/approvals' && pendingApprovalCount !== null && pendingApprovalCount > 0"
+              class="nav-badge"
+              :aria-label="`${pendingApprovalCount} 条待审批查询`"
+            >
+              {{ pendingApprovalLabel }}
+            </span>
+          </RouterLink>
+        </section>
       </nav>
 
       <footer class="sidebar-footer">
-        <div class="local-indicator"><span class="status-dot" />仅限本机访问</div>
-        <button type="button" @click="logout">
-          <span>{{ auth.username }}</span>
-          <small>结束会话 →</small>
+        <div class="local-indicator"><span class="status-dot" />服务在线 · 仅限本机</div>
+        <button class="account-row" type="button" @click="logout">
+          <span class="account-avatar">{{ (auth.username || 'A').slice(0, 1).toUpperCase() }}</span>
+          <span class="account-copy">
+            <strong>{{ auth.username }}</strong>
+            <small>结束当前会话</small>
+          </span>
+          <span class="account-action">↗</span>
         </button>
       </footer>
     </aside>
@@ -122,25 +148,37 @@ watch(() => route.path, (path) => {
     <section class="main-frame">
       <header class="topbar">
         <div class="breadcrumb">
-          <span>只读查询网关 / 系统</span>
-          <strong>{{ activeCode }}</strong>
+          <span>工作区</span>
+          <i>/</i>
+          <strong>{{ activeLabel }}</strong>
         </div>
-        <RouterLink
-          v-if="pendingApprovalCount !== null && pendingApprovalCount > 0"
-          class="approval-alert"
-          to="/approvals"
-          aria-live="polite"
-          :aria-label="`${pendingApprovalCount} 条待审批查询，点击查看`"
-        >
-          <span class="approval-alert-mark"><i /></span>
-          <strong>{{ pendingApprovalLabel }}</strong>
-          <span>条待审批查询</span>
-          <small>立即处理 →</small>
-        </RouterLink>
-        <div class="telemetry">
-          <span><i class="live-dot" />安全策略正常</span>
-          <span>本机服务 / 运行正常</span>
-          <time>{{ timeText }} 中国标准时间</time>
+        <div class="topbar-tools">
+          <RouterLink
+            v-if="pendingApprovalCount !== null && pendingApprovalCount > 0"
+            class="approval-alert"
+            to="/approvals"
+            aria-live="polite"
+            :aria-label="`${pendingApprovalCount} 条待审批查询，点击查看`"
+          >
+            <span class="approval-alert-mark"><i /></span>
+            <strong>{{ pendingApprovalLabel }}</strong>
+            <span>条待审批查询</span>
+            <small>立即处理 →</small>
+          </RouterLink>
+          <button
+            class="theme-toggle"
+            type="button"
+            :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
+            :title="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
+            @click="toggleTheme"
+          >
+            <NavIcon :name="theme === 'dark' ? 'sun' : 'moon'" />
+            <span>{{ theme === 'dark' ? '浅色' : '深色' }}</span>
+          </button>
+          <div class="telemetry">
+            <span class="service-pill"><i class="live-dot" />服务在线</span>
+            <time>{{ timeText }}</time>
+          </div>
         </div>
       </header>
 
@@ -167,35 +205,30 @@ watch(() => route.path, (path) => {
   bottom: 0;
   left: 0;
   display: flex;
-  width: 252px;
+  width: 256px;
   flex-direction: column;
   border-right: 1px solid var(--line);
-  background: rgba(255, 255, 255, .98);
-  box-shadow: 4px 0 14px rgba(26, 48, 40, .035);
+  background: var(--bg-panel);
 }
 
 .brand {
   display: flex;
-  min-height: 112px;
+  min-height: 72px;
   align-items: center;
-  gap: 13px;
-  padding: 0 20px;
+  gap: 11px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--line);
 }
 
 .brand-symbol {
   display: grid;
-  width: 36px;
-  height: 36px;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--green);
-  color: var(--green);
-  font: 700 13px/36px var(--font-mono);
-  text-align: center;
-}
-
-.brand-symbol span:first-child {
-  border-right: 1px solid var(--green);
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  color: var(--blue);
+  background: var(--blue-deep);
 }
 
 .brand strong,
@@ -205,60 +238,58 @@ watch(() => route.path, (path) => {
 
 .brand strong {
   color: var(--text);
-  font: 700 17px/1.2 var(--font-display);
-  letter-spacing: .04em;
+  font: 700 15px/1.2 var(--font-display);
+  letter-spacing: 0;
 }
 
 .brand small {
-  margin-top: 5px;
+  margin-top: 3px;
   color: var(--text-dim);
-  font:  14px/1.3 var(--font-mono);
-  letter-spacing: .03em;
+  font: 12px/1.3 var(--font-display);
 }
 
 .navigation {
   display: grid;
-  gap: 2px;
-  padding: 22px 10px 20px;
+  gap: 22px;
+  padding: 22px 12px 20px;
+}
+
+.nav-group {
+  display: grid;
+  gap: 5px;
+}
+
+.nav-group h2 {
+  margin: 0 10px 3px;
+  color: #94a3b8;
+  font: 600 11px/1.2 var(--font-display);
+  letter-spacing: .04em;
 }
 
 .navigation a {
-  position: relative;
   display: grid;
-  min-height: 45px;
-  grid-template-columns: 31px minmax(0, 1fr) auto 10px;
+  min-height: 38px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
-  color: #53645e;
-  font: 600 15px/1 var(--font-display);
-  letter-spacing: .025em;
+  gap: 11px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: #64748b;
+  font: 500 14px/1 var(--font-display);
   text-decoration: none;
-  transition: color .18s ease, background .18s ease;
+  transition: color .18s ease, background .18s ease, box-shadow .18s ease;
 }
 
 .navigation a:hover {
-  color: var(--text);
-  background: #edf4f0;
+  color: #334155;
+  background: var(--bg-panel-2);
 }
 
 .navigation a.router-link-active {
-  color: #075f50;
-  background: #e8f2ee;
-}
-
-.navigation a.router-link-active::before {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  width: 2px;
-  content: "";
-  background: var(--green);
-}
-
-.nav-code {
-  color: #7b8983;
-  font:  14px/1 var(--font-mono);
-  text-align: center;
+  color: var(--blue);
+  background: var(--blue-deep);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-weight: 600;
 }
 
 .nav-label {
@@ -270,90 +301,110 @@ watch(() => route.path, (path) => {
 
 .nav-badge {
   display: inline-grid;
-  min-width: 24px;
-  height: 21px;
+  min-width: 22px;
+  height: 20px;
   align-items: center;
   justify-content: center;
-  margin-right: 8px;
+  margin-left: auto;
   padding: 0 6px;
-  border: 1px solid #c47a20;
-  border-radius: 3px;
-  color: #8b4f0b;
-  background: #fff5e4;
-  box-shadow: 0 0 0 3px rgba(196, 122, 32, .08);
-  font: 700 12px/1 var(--font-mono);
+  border: 1px solid var(--amber);
+  border-radius: 999px;
+  color: var(--amber);
+  background: var(--amber-deep);
+  font: 600 11px/1 var(--font-display);
   animation: approval-badge-pulse 2.8s ease-in-out infinite;
 }
 
 .navigation a.approval-nav-link {
-  color: #8b4f0b;
-  background: #fff9ef;
+  color: var(--amber);
 }
 
 .navigation a.approval-nav-link:hover {
-  color: #70410a;
-  background: #fff1d9;
+  color: var(--amber);
+  background: var(--amber-deep);
 }
 
-.navigation a.approval-nav-link .nav-code {
-  color: #a85f0d;
-}
-
-.navigation a i {
-  width: 4px;
-  height: 4px;
-  border: 1px solid #48534f;
-  grid-column: 4;
-  transform: rotate(45deg);
-}
-
-.navigation a.router-link-active i {
-  border-color: var(--green);
-  background: var(--green);
+.navigation a :deep(.nav-icon) {
+  width: 17px;
+  height: 17px;
 }
 
 .sidebar-footer {
   margin-top: auto;
-  padding: 18px;
+  padding: 14px 12px 16px;
   border-top: 1px solid var(--line);
 }
 
 .local-indicator {
-  margin-bottom: 14px;
+  margin: 0 8px 12px;
   color: var(--green);
-  font:  14px/1 var(--font-mono);
-  letter-spacing: .06em;
+  font: 12px/1.3 var(--font-display);
 }
 
-.sidebar-footer button {
+.account-row {
   display: flex;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
-  padding: 0;
+  gap: 9px;
+  padding: 9px 8px;
   border: 0;
+  border-radius: 7px;
   color: var(--text-soft);
-  background: transparent;
+  background: var(--bg-panel-2);
   cursor: pointer;
   text-align: left;
+  transition: background .18s ease;
 }
 
-.sidebar-footer button span {
-  max-width: 105px;
+.account-row:hover {
+  background: var(--bg-deep);
+}
+
+.account-avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--blue);
+  background: var(--blue-deep);
+  font: 700 12px/1 var(--font-display);
+}
+
+.account-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.account-copy strong,
+.account-copy small {
   overflow: hidden;
-  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sidebar-footer button small {
+.account-copy strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-copy small {
   color: var(--text-dim);
-  font:  14px/1 var(--font-mono);
+  font-size: 11px;
+}
+
+.account-action {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 14px;
 }
 
 .main-frame {
   min-height: 100vh;
-  margin-left: 252px;
+  margin-left: 256px;
 }
 
 .topbar {
@@ -361,29 +412,38 @@ watch(() => route.path, (path) => {
   z-index: 10;
   top: 0;
   display: flex;
-  height: 58px;
+  height: 64px;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 0 30px;
   border-bottom: 1px solid var(--line);
-  background: rgba(247, 249, 248, .94);
-  backdrop-filter: blur(10px);
+  background: var(--topbar-bg);
+  backdrop-filter: blur(14px);
 }
 
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--text-dim);
-  font:  14px/1 var(--font-mono);
-  letter-spacing: .05em;
+  gap: 9px;
+  color: #94a3b8;
+  font: 13px/1 var(--font-display);
+}
+
+.breadcrumb i {
+  color: #cbd5e1;
+  font-style: normal;
 }
 
 .breadcrumb strong {
-  padding: 4px 6px;
-  color: var(--green);
-  border: 1px solid var(--green-deep);
+  color: var(--text);
   font-weight: 600;
+}
+
+.topbar-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
 }
 
 .approval-alert {
@@ -393,18 +453,18 @@ watch(() => route.path, (path) => {
   gap: 8px;
   margin-left: auto;
   padding: 0 10px;
-  border: 1px solid #d7a158;
-  color: #70410a;
-  background: #fff8eb;
-  box-shadow: inset 3px 0 0 #c47a20;
-  font: 13px/1 var(--font-mono);
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  color: var(--amber);
+  background: var(--amber-deep);
+  font: 12px/1 var(--font-display);
   text-decoration: none;
   transition: border-color .18s ease, background .18s ease, transform .18s ease;
 }
 
 .approval-alert:hover {
-  border-color: #b8731d;
-  background: #fff0d6;
+  border-color: var(--amber);
+  background: var(--amber-deep);
   transform: translateY(-1px);
 }
 
@@ -413,7 +473,7 @@ watch(() => route.path, (path) => {
   width: 16px;
   height: 16px;
   place-items: center;
-  border: 1px solid #c47a20;
+  border: 1px solid var(--amber);
   border-radius: 50%;
 }
 
@@ -421,8 +481,8 @@ watch(() => route.path, (path) => {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #c47a20;
-  box-shadow: 0 0 0 3px rgba(196, 122, 32, .13);
+  background: var(--amber);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 14%, transparent);
   animation: approval-dot-pulse 1.8s ease-in-out infinite;
 }
 
@@ -432,31 +492,70 @@ watch(() => route.path, (path) => {
 
 .approval-alert small {
   margin-left: 4px;
-  color: #a85f0d;
+  color: var(--amber);
   font-size: 12px;
 }
 
 .telemetry {
   display: flex;
-  gap: 22px;
-  color: #607169;
-  font:  14px/1 var(--font-mono);
-  letter-spacing: .04em;
+  align-items: center;
+  gap: 16px;
+  margin-left: 0;
+  color: var(--text-dim);
+  font: 12px/1 var(--font-display);
+}
+
+.service-pill {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid var(--green-deep);
+  border-radius: 999px;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green-deep) 34%, var(--bg-panel));
+}
+
+.theme-toggle {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-soft);
+  background: var(--bg-panel);
+  cursor: pointer;
+  font: 500 12px/1 var(--font-display);
+  transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+  background: var(--bg-panel-2);
+}
+
+.theme-toggle :deep(.nav-icon) {
+  width: 15px;
+  height: 15px;
+  color: var(--text-dim);
 }
 
 .live-dot {
   display: inline-block;
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   margin-right: 7px;
   border-radius: 50%;
   background: var(--green);
 }
 
 .content {
-  width: min(1460px, 100%);
+  width: min(1440px, 100%);
   margin: 0 auto;
-  padding: 36px clamp(20px, 3vw, 44px) 64px;
+  padding: 32px clamp(22px, 3vw, 42px) 64px;
 }
 
 @keyframes approval-badge-pulse {
@@ -503,7 +602,7 @@ watch(() => route.path, (path) => {
 
 @media (max-width: 900px) {
   .sidebar {
-    width: 252px;
+    width: 256px;
     transform: translateX(-100%);
     transition: transform .22s ease;
   }
@@ -517,7 +616,7 @@ watch(() => route.path, (path) => {
     z-index: 15;
     inset: 0;
     display: block;
-    background: rgba(31, 44, 40, .38);
+    background: rgba(15, 23, 42, .35);
     backdrop-filter: blur(3px);
   }
 
@@ -527,12 +626,13 @@ watch(() => route.path, (path) => {
     top: 16px;
     left: 17px;
     display: grid;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     place-content: center;
     gap: 5px;
-    border: 1px solid var(--line-strong);
-    background: #fffdf7;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
   }
 
   .mobile-trigger span {
@@ -548,20 +648,13 @@ watch(() => route.path, (path) => {
 
   .topbar {
     padding-right: 18px;
-    padding-left: 60px;
-  }
-
-  .approval-alert {
-    margin-left: 12px;
+    padding-left: 64px;
   }
 
   .approval-alert small {
     display: none;
   }
 
-  .telemetry span:nth-child(2) {
-    display: none;
-  }
 }
 
 @media (max-width: 560px) {
@@ -578,9 +671,12 @@ watch(() => route.path, (path) => {
   }
 
   .approval-alert {
-    margin-left: auto;
     padding-right: 8px;
     padding-left: 8px;
+  }
+
+  .theme-toggle span {
+    display: none;
   }
 }
 

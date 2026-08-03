@@ -64,6 +64,7 @@ class QueryPreviewServiceTest {
                 auditService,
                 actorContext,
                 new GatewayProperties(),
+                mock(QueryApprovalPolicyService.class),
                 new ObjectMapper());
     }
 

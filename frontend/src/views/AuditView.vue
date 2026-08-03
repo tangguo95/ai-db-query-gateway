@@ -50,6 +50,7 @@ const eventLabels: Record<string, string> = {
   QUERY_EXECUTION_STARTED: '开始执行查询',
   QUERY_FAILED: '查询执行失败',
   QUERY_PENDING_APPROVAL: '进入待审批队列',
+  QUERY_POLICY_AUTO_APPROVED: '风险查询免审批放行',
   QUERY_POLICY_APPROVED: '策略校验通过',
   QUERY_POLICY_REJECTED: '策略拒绝查询',
   QUERY_PREVIEW_FAILED: '查询预检失败',
@@ -59,6 +60,7 @@ const eventLabels: Record<string, string> = {
   QUERY_REJECTED: '查询被拒绝',
   QUERY_REQUESTED: '提交查询申请',
   QUERY_REQUEST_REJECTED: '查询请求被拒绝',
+  QUERY_APPROVAL_POLICY_CHANGED: '修改查询审批开关',
   TOKEN_CREATED: '创建访问令牌',
   TOKEN_CREATE_REQUESTED: '申请创建访问令牌',
   TOKEN_DELETED: '吊销访问令牌',
@@ -466,7 +468,7 @@ onMounted(load)
 .local-time-note {
   margin-left: auto;
   padding-bottom: 10px;
-  color: #5e6e67;
+  color: var(--text-dim);
   font: 13px/1 var(--font-mono);
   white-space: nowrap;
 }
@@ -498,7 +500,7 @@ onMounted(load)
   padding: 0 13px;
   border-bottom: 1px solid var(--line);
   color: var(--text-dim);
-  background: #fffefa;
+  background: var(--bg-panel-2);
   font: 14px/1 var(--font-mono);
   letter-spacing: .06em;
 }
@@ -508,16 +510,16 @@ onMounted(load)
   min-height: 58px;
   padding: 0 13px;
   border: 0;
-  border-bottom: 1px solid #d2dad5;
+  border-bottom: 1px solid var(--line);
   color: var(--text-soft);
-  background: transparent;
+  background: var(--bg-panel);
   cursor: pointer;
   font: 14px/1.4 var(--font-mono);
   text-align: left;
 }
 
 .log-row:hover {
-  background: #eaf2ed;
+  background: var(--bg-panel-2);
 }
 
 .log-row > * {
@@ -529,7 +531,7 @@ onMounted(load)
 }
 
 .sequence {
-  color: #607169;
+  color: var(--text-dim);
 }
 
 .full-time {
@@ -537,20 +539,20 @@ onMounted(load)
   flex-direction: column;
   gap: 3px;
   overflow: visible;
-  color: #53675e;
+  color: var(--text-soft);
   font-size: 13px;
   line-height: 1.15;
   white-space: nowrap;
 }
 
 .full-time span:last-child {
-  color: #789087;
+  color: var(--text-dim);
   font-size: 12px;
 }
 
 .log-row strong {
   overflow: hidden;
-  color: #344a42;
+  color: var(--text);
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 600;
@@ -567,7 +569,7 @@ onMounted(load)
 .log-detail {
   padding: 20px 24px 24px 80px;
   border-bottom: 1px solid var(--line);
-  background: #f2f4ef;
+  background: var(--bg-deep);
 }
 
 .log-detail dl {
@@ -595,14 +597,14 @@ onMounted(load)
 .raw-code {
   display: block;
   margin-top: 4px;
-  color: #84958e;
+  color: var(--text-dim);
   font: 11px/1.4 var(--font-mono);
 }
 
 .query-audit-detail {
   margin-top: 22px;
   border: 1px solid var(--line-strong);
-  background: #fffefa;
+  background: var(--bg-panel);
 }
 
 .query-audit-detail > header {
@@ -627,7 +629,7 @@ onMounted(load)
 }
 
 .query-audit-detail > header strong {
-  color: #3e554b;
+  color: var(--text);
   font: 13px/1 var(--font-mono);
 }
 
@@ -637,8 +639,8 @@ onMounted(load)
 
 .query-detail-error {
   padding: 15px 16px;
-  color: #9f3f39;
-  background: rgba(255, 91, 88, .05);
+  color: var(--red);
+  background: color-mix(in srgb, var(--red-deep) 42%, var(--bg-panel));
   font-size: 13px;
 }
 
@@ -664,7 +666,8 @@ onMounted(load)
   overflow: auto;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
-  color: #2c423a;
+  color: var(--text-soft);
+  background: var(--bg-deep);
   font: 13px/1.6 var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
@@ -673,8 +676,8 @@ onMounted(load)
 .result-retention-note {
   margin: 0;
   padding: 13px 16px;
-  color: #6d7d75;
-  background: #f7f9f4;
+  color: var(--text-dim);
+  background: var(--bg-panel-2);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -729,5 +732,34 @@ onMounted(load)
   .log-detail dl {
     grid-template-columns: 1fr;
   }
+}
+
+.filter-panel,
+.log-panel {
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.log-table {
+  border-top: 0;
+}
+
+.log-table :deep(.el-table__header-wrapper th) {
+  background: var(--bg-panel-2);
+}
+
+.query-audit-detail {
+  border-radius: 7px;
+  background: var(--bg-panel);
+}
+
+.query-sql {
+  color: var(--text-soft);
+  background: var(--bg-deep);
+}
+
+.result-retention-note {
+  color: var(--text-dim);
+  background: var(--bg-panel-2);
 }
 </style>

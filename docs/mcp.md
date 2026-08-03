@@ -60,9 +60,12 @@ UUID `requestId`，原始 MCP 工具参数不会被修改；后端使用该 UUID
 适配器不接收 JSON-RPC batch。
 
 `execute_read_query` 的必填参数是 `dataSourceId`、`sql` 和 `purpose`，可选参数为
-`parameters` 与 `maxRows`。高风险查询返回 `PENDING_APPROVAL` 后，由用户在网页审批，
-AI 再通过 `get_query_request` 和 `execute_approved_query` 消费五分钟内有效的一次性
-审批。
+`parameters` 与 `maxRows`。默认情况下，高风险查询返回 `PENDING_APPROVAL` 后，由用户
+在网页审批，AI 再通过 `get_query_request` 和 `execute_approved_query` 消费五分钟内有效
+的一次性审批。管理员也可以在网页“安全设置”开启“免审批执行”；此时高风险查询直接
+进入执行链，但 SQL AST 只读校验、数据库只读事务、超时、行数、响应大小、并发和令牌
+数据源范围仍然强制生效。
+该开关只影响切换后新提交的请求，已经进入待审批队列的申请不会自动改状态。
 
 ## 并发与取消
 

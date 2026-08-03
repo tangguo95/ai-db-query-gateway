@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import NavIcon from '../components/NavIcon.vue'
+import { useTheme } from '../theme'
+
 defineProps<{
   step: string
   title: string
   subtitle: string
 }>()
+
+const { theme, toggleTheme } = useTheme()
 </script>
 
 <template>
@@ -25,7 +30,19 @@ defineProps<{
     <section class="auth-console">
       <div class="console-top">
         <span><i />本机回环安全通道</span>
-        <span>{{ step }}</span>
+        <div class="console-top-actions">
+          <span>{{ step }}</span>
+          <button
+            class="auth-theme-toggle"
+            type="button"
+            :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
+            :title="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
+            @click="toggleTheme"
+          >
+            <NavIcon :name="theme === 'dark' ? 'sun' : 'moon'" />
+            <span>{{ theme === 'dark' ? '浅色' : '深色' }}</span>
+          </button>
+        </div>
       </div>
       <div class="auth-card">
         <p class="eyebrow">{{ step }} / 管理员认证</p>
@@ -58,7 +75,7 @@ defineProps<{
   overflow: hidden;
   padding: clamp(42px, 6vw, 86px);
   border-right: 1px solid var(--line);
-  background: #eef3f1;
+  background: #fff;
 }
 
 .auth-brand {
@@ -70,23 +87,24 @@ defineProps<{
   display: inline-block;
   margin-bottom: 40px;
   padding: 7px 11px;
-  border: 1px solid #bdd8ce;
-  color: #176353;
-  background: #e2eee9;
-  font: 700 14px/1 var(--font-display);
-  letter-spacing: .04em;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  font: 600 12px/1 var(--font-display);
+  letter-spacing: 0;
 }
 
 .auth-brand h1 {
   margin: 0;
-  color: #172823;
-  font: 700 clamp(36px, 4.5vw, 60px)/1.12 var(--font-display);
-  letter-spacing: -.01em;
+  color: var(--text);
+  font: 700 clamp(34px, 4.2vw, 56px)/1.12 var(--font-display);
+  letter-spacing: -.04em;
 }
 
 .auth-brand p {
   margin: 22px 0 0;
-  color: var(--green);
+  color: var(--blue);
   font: 14px/1.5 var(--font-display);
   letter-spacing: .04em;
 }
@@ -113,7 +131,7 @@ defineProps<{
 }
 
 .security-notes span {
-  color: #52635d;
+  color: var(--text-soft);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -123,6 +141,7 @@ defineProps<{
   min-height: 100vh;
   grid-template-rows: 58px 1fr 48px;
   padding: 0 clamp(28px, 6vw, 90px);
+  background: #f8fafc;
 }
 
 .console-top,
@@ -133,6 +152,36 @@ defineProps<{
   color: var(--text-dim);
   font:  14px/1 var(--font-mono);
   letter-spacing: .04em;
+}
+
+.console-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.auth-theme-toggle {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-soft);
+  background: var(--bg-panel);
+  cursor: pointer;
+  font: 500 12px/1 var(--font-display);
+}
+
+.auth-theme-toggle:hover {
+  color: var(--text);
+  background: var(--bg-panel-2);
+}
+
+.auth-theme-toggle :deep(.nav-icon) {
+  width: 15px;
+  height: 15px;
 }
 
 .console-top {
@@ -150,16 +199,20 @@ defineProps<{
 }
 
 .auth-card {
-  width: min(440px, 100%);
+  width: min(480px, 100%);
   margin: auto;
-  padding: 44px 0;
+  padding: 34px 36px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .05);
 }
 
 .auth-card h2 {
   margin: 0;
-  color: #15231f;
-  font: 650 clamp(28px, 4vw, 40px)/1.1 var(--font-display);
-  letter-spacing: .01em;
+  color: var(--text);
+  font: 700 clamp(26px, 3.5vw, 34px)/1.15 var(--font-display);
+  letter-spacing: -.03em;
 }
 
 .auth-subtitle {

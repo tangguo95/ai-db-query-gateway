@@ -27,6 +27,10 @@ export interface CurrentUser {
   idleExpiresAt?: string
 }
 
+export interface QueryApprovalPolicy {
+  approvalRequired: boolean
+}
+
 export interface DataSourceSummary {
   id: string
   name: string

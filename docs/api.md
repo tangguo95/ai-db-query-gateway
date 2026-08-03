@@ -12,6 +12,7 @@
 | `POST` | `/api/auth/login` | 管理员登录 |
 | `POST` | `/api/auth/logout` | 注销并失效 Session |
 | `GET` | `/api/dashboard` | 安全状态汇总 |
+| `GET/PUT` | `/api/settings/query-approval` | 查看/修改高风险 AI 查询审批开关 |
 | `GET/POST` | `/api/datasources` | 列表/新增数据源 |
 | `GET/PUT/DELETE` | `/api/datasources/{id}` | 查看/更新/软删除 |
 | `POST` | `/api/datasources/{id}/test` | 连接复检（不读取账号授权） |
@@ -32,6 +33,10 @@
 
 网页写请求必须带从 `XSRF-TOKEN` cookie 读取的 `X-XSRF-TOKEN` header。响应统一
 `Cache-Control: no-store`，错误体包含稳定的 `code`，不会返回底层 JDBC 异常。
+
+`GET /api/settings/query-approval` 返回 `{ "approvalRequired": true }`。管理员使用 `PUT`
+修改该值；设置写入本地 `app_setting`，优先级高于启动时的
+`GATEWAY_QUERY_APPROVAL_REQUIRED` 默认环境变量。
 
 ## AI 接口
 
@@ -92,8 +97,10 @@ Schema、表、风险原因、数据源只读等级、参数数量、SQL 指纹�
 }
 ```
 
-AI 风险查询先返回 `PENDING_APPROVAL`，不含结果。管理员批准后，原 Token 在五分钟内
-调用 execute；批准只能消费一次。
+默认情况下，AI 风险查询先返回 `PENDING_APPROVAL`，不含结果。管理员批准后，原 Token
+在五分钟内调用 execute；批准只能消费一次。若管理员关闭
+`/api/settings/query-approval` 的 `approvalRequired`，风险查询会直接执行并写入
+`QUERY_POLICY_AUTO_APPROVED` 审计事件，但其他只读安全策略不变。
 
 网页管理员还可以通过 `GET /api/queries/{queryId}/result` 从审计轨迹回看最近执行结果。
 该接口只读取内存中的短时缓存（最多 20 条、15 分钟），不会从 SQLite 或审计记录恢复结果；

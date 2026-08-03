@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage } from '../api/client'
-import type { CurrentUser, Dashboard } from '../api/types'
+import type { CurrentUser, Dashboard, QueryApprovalPolicy } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import LoadState from '../components/LoadState.vue'
 import StateChip from '../components/StateChip.vue'
@@ -14,7 +14,9 @@ const loading = ref(true)
 const error = ref('')
 const user = ref<CurrentUser | null>(null)
 const dashboard = ref<Dashboard | null>(null)
+const approvalPolicy = ref<QueryApprovalPolicy | null>(null)
 const locking = ref(false)
+const updatingApprovalPolicy = ref(false)
 
 const policyGroups = [
   {
@@ -47,11 +49,48 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    ;[user.value, dashboard.value] = await Promise.all([api.currentUser(), api.dashboard()])
+    ;[user.value, dashboard.value, approvalPolicy.value] = await Promise.all([
+      api.currentUser(),
+      api.dashboard(),
+      api.queryApprovalPolicy()
+    ])
   } catch (cause) {
     error.value = errorMessage(cause)
   } finally {
     loading.value = false
+  }
+}
+
+async function changeApprovalMode(skipApproval: boolean) {
+  if (!approvalPolicy.value || updatingApprovalPolicy.value) return
+  const nextApprovalRequired = !skipApproval
+  const previousApprovalRequired = approvalPolicy.value.approvalRequired
+  if (nextApprovalRequired === previousApprovalRequired) return
+
+  if (skipApproval) {
+    try {
+      await ElMessageBox.confirm(
+        '开启后，命中风险规则的 AI 查询也会直接执行。SQL 只读解析、查询超时、行数、响应大小和并发限制仍然生效。',
+        '确认开启免审批执行',
+        {
+          confirmButtonText: '确认开启',
+          cancelButtonText: '暂不开启',
+          type: 'warning'
+        }
+      )
+    } catch {
+      return
+    }
+  }
+
+  updatingApprovalPolicy.value = true
+  try {
+    approvalPolicy.value = await api.updateQueryApprovalPolicy(nextApprovalRequired)
+    ElMessage.success(nextApprovalRequired ? '已恢复高风险查询审批' : '已开启高风险查询免审批执行')
+  } catch (cause) {
+    ElMessage.error(errorMessage(cause))
+  } finally {
+    updatingApprovalPolicy.value = false
   }
 }
 
@@ -162,6 +201,40 @@ onMounted(load)
             </div>
             <strong>{{ policy.state }}</strong>
           </article>
+        </div>
+      </section>
+
+      <section class="panel approval-policy-panel">
+        <header class="panel-header">
+          <div>
+            <p class="panel-title">高风险查询审批</p>
+            <span class="panel-code">管理员开关 / 本地持久化</span>
+          </div>
+          <span class="fixed-label" :class="{ 'approval-off-label': approvalPolicy && !approvalPolicy.approvalRequired }">
+            {{ approvalPolicy?.approvalRequired ? '当前需要审批' : '当前免审批执行' }}
+          </span>
+        </header>
+        <div v-if="approvalPolicy" class="approval-policy-body">
+          <div class="approval-policy-copy">
+            <div class="approval-policy-status">
+              <span class="status-dot" :class="{ 'status-dot-warning': !approvalPolicy.approvalRequired }" />
+              <strong>{{ approvalPolicy.approvalRequired ? '风险查询进入待审批' : '风险查询自动执行' }}</strong>
+            </div>
+            <p>
+              关闭审批后，仅跳过网页一次性审批；SQL AST 只读校验、数据库只读事务、查询超时、行数、响应大小、并发和令牌数据源范围不会关闭。
+            </p>
+            <small>只影响切换后新提交的 API Token / MCP 风险查询；已经进入队列的申请不会自动改状态。</small>
+          </div>
+          <div class="approval-policy-control">
+            <el-switch
+              :model-value="!approvalPolicy.approvalRequired"
+              active-text="免审批执行"
+              inactive-text="每次审批"
+              :loading="updatingApprovalPolicy"
+              @change="changeApprovalMode(Boolean($event))"
+            />
+            <span>设置会保存到本机，重启后继续生效。</span>
+          </div>
         </div>
       </section>
 
@@ -362,6 +435,72 @@ onMounted(load)
   margin-bottom: 12px;
 }
 
+.approval-policy-panel {
+  margin-bottom: 12px;
+}
+
+.approval-off-label {
+  color: var(--red);
+}
+
+.approval-policy-body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 22px;
+}
+
+.approval-policy-copy {
+  min-width: 0;
+}
+
+.approval-policy-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  font: 650 15px/1.3 var(--font-display);
+}
+
+.approval-policy-status .status-dot {
+  flex: 0 0 auto;
+}
+
+.status-dot-warning {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(198, 73, 66, .1);
+}
+
+.approval-policy-copy p {
+  max-width: 860px;
+  margin: 10px 0 5px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.approval-policy-copy small,
+.approval-policy-control span {
+  color: var(--text-dim);
+  font: 13px/1.5 var(--font-mono);
+}
+
+.approval-policy-control {
+  display: grid;
+  min-width: 170px;
+  justify-items: end;
+  gap: 10px;
+}
+
+.approval-policy-control .el-switch {
+  --el-switch-on-color: var(--red);
+}
+
+.approval-policy-control > span {
+  text-align: right;
+}
+
 .fixed-label {
   color: var(--amber);
   font:  14px/1 var(--font-mono);
@@ -456,6 +595,18 @@ onMounted(load)
   .integrity-body {
     grid-template-columns: 1fr;
   }
+
+  .approval-policy-body {
+    grid-template-columns: 1fr;
+  }
+
+  .approval-policy-control {
+    justify-items: start;
+  }
+
+  .approval-policy-control > span {
+    text-align: left;
+  }
 }
 
 @media (max-width: 680px) {
@@ -476,5 +627,46 @@ onMounted(load)
   .policy-list article:last-child {
     border-bottom: 0 !important;
   }
+}
+
+.posture-panel,
+.session-panel,
+.policy-panel,
+.approval-policy-panel,
+.integrity-panel {
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.shield-core {
+  border-radius: 12px;
+  border-color: #93c5fd;
+  background: #eff6ff;
+  clip-path: none;
+}
+
+.orbit {
+  border-color: #bfdbfe;
+  animation: none;
+}
+
+.operator-avatar {
+  border-radius: 50%;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  background: #eff6ff;
+  transform: none;
+}
+
+.policy-code {
+  border-radius: 8px;
+  border-color: #bfdbfe;
+  color: var(--blue);
+  background: #eff6ff;
+}
+
+.checksum {
+  border-radius: 6px;
+  background: #f8fafc;
 }
 </style>

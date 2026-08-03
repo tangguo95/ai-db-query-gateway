@@ -29,6 +29,10 @@ public final class ApiDtos {
 
     public record CurrentUser(boolean authenticated, String username, List<String> roles) {}
 
+    public record QueryApprovalPolicyView(boolean approvalRequired) {}
+
+    public record QueryApprovalPolicyUpdateRequest(boolean approvalRequired) {}
+
     public record DataSourceCreateRequest(
             @NotBlank @Size(max = 100) String name,
             @NotNull DatabaseType databaseType,

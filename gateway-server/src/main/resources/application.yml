@@ -55,6 +55,8 @@ gateway:
     global-concurrency: 4
     per-data-source-concurrency: 2
     approval-ttl: 5m
+    # 仅作为首次启动默认值；网页安全设置中的管理员开关会持久化覆盖它。
+    approval-required: ${GATEWAY_QUERY_APPROVAL_REQUIRED:true}
   security:
     token-rate-per-minute: 30
     absolute-session-timeout: 8h
