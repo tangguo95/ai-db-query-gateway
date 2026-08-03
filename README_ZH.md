@@ -73,7 +73,7 @@ Node。
 git clone https://github.com/tangguo95/ai-db-query-gateway.git
 cd ai-db-query-gateway
 ./scripts/build.sh
-./scripts/run.sh
+./scripts/launchd.sh start
 ```
 
 打开 <http://127.0.0.1:8765>。第一次启动时，服务会创建一次性文件：
@@ -93,6 +93,29 @@ cd ai-db-query-gateway
 
 其中包含 SQLite 控制库和初始化状态。数据库凭据与审计密钥独立保存在 Keychain，不会进入
 仓库、进程参数、环境变量或普通日志。
+
+`launchd` 这里是手动加载的用户服务，不是登录快捷方式：关闭终端后服务仍会运行，异常退出会自动
+重启；但它不会在登录 macOS 或重启电脑后自动加载。按需使用以下命令：
+
+```bash
+./scripts/launchd.sh status
+./scripts/launchd.sh stop
+./scripts/launchd.sh restart
+```
+
+如果需要前台排查日志，可以使用 `./scripts/run.sh`。前台命令依赖当前终端，终端会话结束后服务也会停止。
+
+### macOS 菜单栏管理工具
+
+构建并打开可选的顶部状态栏小工具：
+
+```bash
+./native/statusbar/build.sh
+open "native/statusbar/build/AI DB Query Gateway.app"
+```
+
+小工具可以查看 launchd 服务状态、启动/停止/重启网关、打开管理页面和服务日志；不会开启登录自启动，
+也不会处理数据库凭据。
 
 ## 使用 MCP 连接 AI
 
@@ -156,6 +179,7 @@ gateway-server/          Spring Boot API、策略、JDBC 执行、审计和静�
 gateway-mcp/              不包含数据库驱动的 MCP 2024-11-05 STDIO 适配器
 frontend/                 Vue 3 + TypeScript 网页控制台
 native/macos-keychain/    Swift Security.framework helper
+native/statusbar/         macOS 菜单栏网关管理工具
 docs/                     REST、MCP、架构和测试文档
 scripts/                  可复现构建、启动和令牌配置脚本
 ```

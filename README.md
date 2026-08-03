@@ -80,7 +80,7 @@ system-wide Node installation is not required.
 git clone https://github.com/tangguo95/ai-db-query-gateway.git
 cd ai-db-query-gateway
 ./scripts/build.sh
-./scripts/run.sh
+./scripts/launchd.sh start
 ```
 
 Open <http://127.0.0.1:8765>. On the first launch the service creates a one-time
@@ -103,6 +103,30 @@ The default runtime directory is:
 It contains the SQLite control database and bootstrap state. Database credentials and audit
 keys are stored separately in Keychain under the application service; they are not put in the
 repository, process arguments, environment variables, or ordinary logs.
+
+The launchd command is a manually loaded user service, not a login shortcut. It stays running
+after the terminal is closed and restarts after an unexpected crash, but it is not loaded after
+macOS login or reboot. Use these commands when needed:
+
+```bash
+./scripts/launchd.sh status
+./scripts/launchd.sh stop
+```
+
+For foreground troubleshooting, use `./scripts/run.sh` instead. The foreground command is tied
+to its terminal and will stop when that terminal session ends.
+
+### macOS menu bar manager
+
+Build and open the optional menu bar utility:
+
+```bash
+./native/statusbar/build.sh
+open "native/statusbar/build/AI DB Query Gateway.app"
+```
+
+The utility exposes the launchd service status, start/stop/restart actions, the web console, and
+service logs. It does not enable login startup and does not handle database credentials.
 
 ## Connect an AI client with MCP
 
@@ -174,6 +198,7 @@ gateway-server/          Spring Boot API, policy, JDBC execution, audit, and sta
 gateway-mcp/              MCP 2024-11-05 STDIO adapter without database drivers
 frontend/                 Vue 3 + TypeScript web console
 native/macos-keychain/    Swift Security.framework helper
+native/statusbar/         macOS menu bar gateway manager
 docs/                     REST, MCP, architecture, and testing documentation
 scripts/                  Reproducible build, run, and token setup scripts
 ```

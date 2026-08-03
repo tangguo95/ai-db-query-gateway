@@ -10,4 +10,8 @@ fi
 cd "${PROJECT_DIR}"
 ./mvnw clean verify
 
-echo "Build completed: gateway-server and gateway-mcp are ready under their target directories."
+if [ "$(uname -s)" = "Darwin" ]; then
+    "${PROJECT_DIR}/native/statusbar/build.sh"
+fi
+
+echo "Build completed: gateway-server, gateway-mcp, and the macOS menu bar app are ready."
