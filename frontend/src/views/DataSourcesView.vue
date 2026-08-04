@@ -1094,7 +1094,7 @@ dd {
 .status-bar {
   gap: 28px;
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--bg-panel);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .02);
 }
 
