@@ -34,6 +34,7 @@ const eventLabels: Record<string, string> = {
   DATASOURCE_SECRET_UPDATED: '更新数据源密钥',
   DATASOURCE_TESTED: '数据源连接检查完成',
   DATASOURCE_TEST_REQUESTED: '申请检查数据源连接',
+  DATASOURCE_AUTO_RECHECK_POLICY_CHANGED: '修改数据源自动复检开关',
   DATASOURCE_UPDATED: '更新数据源配置',
   HTTP_API_COMPLETED: '接口请求完成',
   HTTP_API_REQUESTED: '接口请求开始',

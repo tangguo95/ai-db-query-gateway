@@ -20,7 +20,9 @@ const creating = ref(false)
 const editOpen = ref(false)
 const updating = ref(false)
 const editingSource = ref<DataSourceSummary | null>(null)
-const testingId = ref<string | null>(null)
+const testingIds = ref<Set<string>>(new Set())
+const selectedIds = ref<string[]>([])
+const batchTesting = ref(false)
 const deletingId = ref<string | null>(null)
 
 const defaultForm = (): CreateDataSourceRequest => ({
@@ -72,6 +74,20 @@ const statusCounts = computed(() => ({
   blocked: dataSources.value.filter((source) => source.readOnlyStatus === 'BLOCKED').length
 }))
 
+const selectedCount = computed(() => selectedIds.value.length)
+const allSelected = computed(() => dataSources.value.length > 0 && selectedCount.value === dataSources.value.length)
+
+function isTesting(id: string): boolean {
+  return testingIds.value.has(id)
+}
+
+function setTesting(id: string, active: boolean) {
+  const next = new Set(testingIds.value)
+  if (active) next.add(id)
+  else next.delete(id)
+  testingIds.value = next
+}
+
 watch(() => form.databaseType, (next, previous) => {
   const previousDefault = previous === 'OCEANBASE_ORACLE' ? 2883 : 3306
   if (form.port === previousDefault) form.port = next === 'OCEANBASE_ORACLE' ? 2883 : 3306
@@ -82,6 +98,8 @@ async function load() {
   error.value = ''
   try {
     dataSources.value = normalizeList(await api.dataSources()).items
+    const availableIds = new Set(dataSources.value.map((source) => source.id))
+    selectedIds.value = selectedIds.value.filter((id) => availableIds.has(id))
   } catch (cause) {
     error.value = errorMessage(cause)
   } finally {
@@ -151,7 +169,7 @@ async function create() {
 
   form.password = ''
   createOpen.value = false
-  testingId.value = saved.id
+  setTesting(saved.id, true)
   let checked: DataSourceTestResult | undefined
   try {
     checked = await api.testDataSource(saved.id)
@@ -161,22 +179,62 @@ async function create() {
   } finally {
     await load()
     if (checked) applyTestResult(saved.id, checked)
-    testingId.value = null
+    setTesting(saved.id, false)
     creating.value = false
   }
 }
 
-async function testConnection(source: DataSourceSummary) {
-  testingId.value = source.id
+async function testConnection(source: DataSourceSummary, announce = true): Promise<boolean> {
+  if (isTesting(source.id)) return false
+  setTesting(source.id, true)
   try {
     const checked = await api.testDataSource(source.id)
     applyTestResult(source.id, checked)
-    showTestOutcome(checked, false)
+    if (announce) showTestOutcome(checked, false)
+    return checked.reachable && checked.enabled
   } catch (cause) {
-    await load()
-    ElMessage.error(`复检失败，数据源已隔离。${errorMessage(cause)}`)
+    if (announce) {
+      await load()
+      ElMessage.error(`复检失败，数据源已隔离。${errorMessage(cause)}`)
+    }
+    return false
   } finally {
-    testingId.value = null
+    setTesting(source.id, false)
+  }
+}
+
+function toggleSelection(id: string, event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  selectedIds.value = checked
+    ? [...new Set([...selectedIds.value, id])]
+    : selectedIds.value.filter((selectedId) => selectedId !== id)
+}
+
+function toggleAllSelection(event: Event) {
+  const checked = (event.target as HTMLInputElement).checked
+  selectedIds.value = checked ? dataSources.value.map((source) => source.id) : []
+}
+
+async function testSelected() {
+  const sources = dataSources.value.filter((source) => selectedIds.value.includes(source.id) && !isTesting(source.id))
+  if (!sources.length) {
+    ElMessage.warning('请先选择需要复检的数据源')
+    return
+  }
+
+  batchTesting.value = true
+  try {
+    const results = await Promise.all(sources.map((source) => testConnection(source, false)))
+    await load()
+    const passed = results.filter(Boolean).length
+    const failed = results.length - passed
+    if (failed) {
+      ElMessage.warning(`已完成 ${results.length} 个数据源复检：${passed} 个通过，${failed} 个失败并保持隔离`)
+    } else {
+      ElMessage.success(`已完成 ${passed} 个数据源复检`)
+    }
+  } finally {
+    batchTesting.value = false
   }
 }
 
@@ -254,14 +312,14 @@ async function updateDataSource() {
   editOpen.value = false
   let checked: DataSourceTestResult | undefined
   if (connectionChanged || policyChanged) {
-    testingId.value = source.id
+    setTesting(source.id, true)
     try {
       checked = await api.testDataSource(source.id)
       showTestOutcome(checked, true)
     } catch (cause) {
       ElMessage.error(`设置已保存但复检失败，数据源已保持隔离。${errorMessage(cause)}`)
     } finally {
-      testingId.value = null
+      setTesting(source.id, false)
     }
   } else {
     ElMessage.success('数据源配置已更新')
@@ -292,6 +350,7 @@ async function deleteDataSource(source: DataSourceSummary) {
   try {
     await api.deleteDataSource(source.id)
     dataSources.value = dataSources.value.filter((item) => item.id !== source.id)
+    selectedIds.value = selectedIds.value.filter((id) => id !== source.id)
     ElMessage.success('数据源及其服务端凭据已删除，历史审计保留')
   } catch (cause) {
     ElMessage.error(errorMessage(cause))
@@ -321,9 +380,9 @@ onMounted(load)
   <div>
     <header class="page-heading">
       <div>
-        <p class="eyebrow">数据源管理 / 凭据隔离</p>
-        <h1 class="page-title">数据源舱单</h1>
-        <p class="page-subtitle">连接信息只提交给本机服务且不会回传网页或 AI；具体凭据存储实现以服务端启动配置为准。</p>
+        <p class="eyebrow">数据源管理 / 连接状态</p>
+        <h1 class="page-title">数据源</h1>
+        <p class="page-subtitle">管理数据库连接，查看连接状态并执行连接复检。凭据由本机服务安全保存，网页不会显示。</p>
       </div>
       <el-button type="primary" @click="openCreate">接入数据源</el-button>
     </header>
@@ -348,9 +407,40 @@ onMounted(load)
           <el-button type="primary" class="empty-action" @click="openCreate">添加第一个数据源</el-button>
         </template>
 
+        <div class="source-toolbar">
+          <label class="select-all-control">
+            <input
+              type="checkbox"
+              :checked="allSelected"
+              :indeterminate="selectedCount > 0 && !allSelected"
+              @change="toggleAllSelection"
+            />
+            <span>全选</span>
+          </label>
+          <span class="selection-count">已选择 {{ selectedCount }} 个</span>
+          <el-button
+            type="primary"
+            plain
+            :loading="batchTesting"
+            :disabled="selectedCount === 0 || batchTesting"
+            @click="testSelected"
+          >
+            批量连接复检
+          </el-button>
+          <span class="toolbar-note">可以同时复检多个数据源</span>
+        </div>
+
         <div class="source-list">
           <article v-for="(source, index) in dataSources" :key="source.id" class="source-card">
-            <div class="source-index">{{ String(index + 1).padStart(2, '0') }}</div>
+            <div class="source-index">
+              <span>{{ String(index + 1).padStart(2, '0') }}</span>
+              <input
+                type="checkbox"
+                :checked="selectedIds.includes(source.id)"
+                :aria-label="`选择数据源 ${source.name}`"
+                @change="toggleSelection(source.id, $event)"
+              />
+            </div>
             <div class="source-main">
               <header>
                 <div class="source-identity">
@@ -389,7 +479,7 @@ onMounted(load)
               <div class="action-grid">
                 <el-button
                   plain
-                  :loading="testingId === source.id"
+                  :loading="isTesting(source.id)"
                   :disabled="deletingId === source.id"
                   @click="testConnection(source)"
                 >
@@ -397,7 +487,7 @@ onMounted(load)
                 </el-button>
                 <el-button
                   plain
-                  :disabled="testingId === source.id || deletingId === source.id"
+                  :disabled="isTesting(source.id) || deletingId === source.id"
                   @click="openEdit(source)"
                 >
                   编辑 / 轮换
@@ -406,7 +496,7 @@ onMounted(load)
                   plain
                   type="danger"
                   :loading="deletingId === source.id"
-                  :disabled="testingId === source.id"
+                  :disabled="isTesting(source.id)"
                   @click="deleteDataSource(source)"
                 >
                   删除
@@ -594,7 +684,7 @@ onMounted(load)
   margin-bottom: 12px;
   padding: 12px 16px;
   border: 1px solid var(--line);
-  background: #f2f4ef;
+  background: var(--bg-panel-2);
   color: var(--text-dim);
   font:  14px/1 var(--font-mono);
   letter-spacing: .04em;
@@ -608,6 +698,46 @@ onMounted(load)
 
 .source-panel {
   overflow: hidden;
+}
+
+.source-toolbar {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-panel-2);
+}
+
+.select-all-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.selection-count,
+.toolbar-note {
+  color: var(--text-dim);
+  font: 13px/1.3 var(--font-mono);
+}
+
+.toolbar-note {
+  margin-left: auto;
+}
+
+.source-toolbar input,
+.source-index input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
 }
 
 .empty-action {
@@ -630,9 +760,14 @@ onMounted(load)
 }
 
 .source-index {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
   padding: 23px 0;
   border-right: 1px solid var(--line);
-  color: #5e6e67;
+  color: var(--text-dim);
   font:  13px/1 var(--font-mono);
   text-align: center;
 }
@@ -670,7 +805,7 @@ onMounted(load)
 }
 
 .source-state > span {
-  color: #607169;
+  color: var(--text-dim);
   font: 12px/1 var(--font-mono);
   letter-spacing: .08em;
 }
@@ -688,7 +823,7 @@ dl {
 
 dt {
   margin-bottom: 6px;
-  color: #607169;
+  color: var(--text-dim);
   font:  14px/1 var(--font-mono);
   letter-spacing: .09em;
 }
@@ -696,7 +831,7 @@ dt {
 dd {
   margin: 0;
   overflow: hidden;
-  color: #52645d;
+  color: var(--text-soft);
   font:  14px/1.4 var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -911,6 +1046,15 @@ dd {
   }
 
   .source-index {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: 42px;
+    padding: 12px 15px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .source-index > span {
     display: none;
   }
 
@@ -930,6 +1074,15 @@ dd {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .source-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .toolbar-note {
+    width: 100%;
+    margin-left: 0;
   }
 
   .full-span {
@@ -957,12 +1110,12 @@ dd {
 }
 
 .source-card:hover {
-  background: #fbfdff;
+  background: var(--bg-panel-2);
 }
 
 .source-index {
-  color: #94a3b8;
-  background: #f8fafc;
+  color: var(--text-dim);
+  background: var(--bg-panel-2);
 }
 
 .source-main {
@@ -976,7 +1129,7 @@ dd {
 
 .source-action {
   padding: 18px;
-  background: #fcfdff;
+  background: var(--bg-panel-2);
 }
 
 .action-grid :deep(.el-button) {

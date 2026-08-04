@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage } from '../api/client'
-import type { CurrentUser, Dashboard, QueryApprovalPolicy } from '../api/types'
+import type { CurrentUser, DataSourceRecoveryPolicy, Dashboard, QueryApprovalPolicy } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import LoadState from '../components/LoadState.vue'
 import StateChip from '../components/StateChip.vue'
@@ -15,8 +15,10 @@ const error = ref('')
 const user = ref<CurrentUser | null>(null)
 const dashboard = ref<Dashboard | null>(null)
 const approvalPolicy = ref<QueryApprovalPolicy | null>(null)
+const recoveryPolicy = ref<DataSourceRecoveryPolicy | null>(null)
 const locking = ref(false)
 const updatingApprovalPolicy = ref(false)
+const updatingRecoveryPolicy = ref(false)
 
 const policyGroups = [
   {
@@ -49,10 +51,11 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    ;[user.value, dashboard.value, approvalPolicy.value] = await Promise.all([
+    ;[user.value, dashboard.value, approvalPolicy.value, recoveryPolicy.value] = await Promise.all([
       api.currentUser(),
       api.dashboard(),
-      api.queryApprovalPolicy()
+      api.queryApprovalPolicy(),
+      api.dataSourceRecoveryPolicy()
     ])
   } catch (cause) {
     error.value = errorMessage(cause)
@@ -91,6 +94,37 @@ async function changeApprovalMode(skipApproval: boolean) {
     ElMessage.error(errorMessage(cause))
   } finally {
     updatingApprovalPolicy.value = false
+  }
+}
+
+async function changeRecoveryMode(enabled: boolean) {
+  if (!recoveryPolicy.value || updatingRecoveryPolicy.value) return
+  if (enabled === recoveryPolicy.value.autoRetryConnectionChecks) return
+
+  if (enabled) {
+    try {
+      await ElMessageBox.confirm(
+        '开启后，后台会定期对已隔离的数据源发起连接检查。它只获取连接和数据库元数据，不会执行或重试任何 SQL；连接成功后会恢复数据源启用状态。',
+        '确认开启自动连接复检',
+        {
+          confirmButtonText: '确认开启',
+          cancelButtonText: '暂不开启',
+          type: 'warning'
+        }
+      )
+    } catch {
+      return
+    }
+  }
+
+  updatingRecoveryPolicy.value = true
+  try {
+    recoveryPolicy.value = await api.updateDataSourceRecoveryPolicy(enabled)
+    ElMessage.success(enabled ? '已开启自动连接复检' : '已关闭自动连接复检')
+  } catch (cause) {
+    ElMessage.error(errorMessage(cause))
+  } finally {
+    updatingRecoveryPolicy.value = false
   }
 }
 
@@ -232,6 +266,42 @@ onMounted(load)
               inactive-text="每次审批"
               :loading="updatingApprovalPolicy"
               @change="changeApprovalMode(Boolean($event))"
+            />
+            <span>设置会保存到本机，重启后继续生效。</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel recovery-policy-panel">
+        <header class="panel-header">
+          <div>
+            <p class="panel-title">数据源自动复检</p>
+            <span class="panel-code">管理员开关 / 仅检查连接</span>
+          </div>
+          <span class="fixed-label" :class="{ 'recovery-off-label': recoveryPolicy && !recoveryPolicy.autoRetryConnectionChecks }">
+            {{ recoveryPolicy?.autoRetryConnectionChecks ? '当前已开启' : '当前未开启' }}
+          </span>
+        </header>
+        <div v-if="recoveryPolicy" class="recovery-policy-body">
+          <div class="recovery-policy-copy">
+            <div class="approval-policy-status">
+              <span class="status-dot" :class="{ 'status-dot-warning': !recoveryPolicy.autoRetryConnectionChecks }" />
+              <strong>{{ recoveryPolicy.autoRetryConnectionChecks ? '隔离数据源会自动检查' : '隔离数据源需要手动复检' }}</strong>
+            </div>
+            <p>
+              开启后，后台只对“连接未知 / 已隔离”的数据源做连接检查；检查成功后恢复启用。不会执行、重试或保存任何 SQL 查询结果。
+            </p>
+            <small>
+              检查间隔约 {{ recoveryPolicy.retryIntervalSeconds }} 秒，连续失败会逐步延长间隔，最长 {{ recoveryPolicy.maxBackoffMinutes }} 分钟。
+            </small>
+          </div>
+          <div class="recovery-policy-control">
+            <el-switch
+              :model-value="recoveryPolicy.autoRetryConnectionChecks"
+              active-text="自动检查"
+              inactive-text="手动复检"
+              :loading="updatingRecoveryPolicy"
+              @change="changeRecoveryMode(Boolean($event))"
             />
             <span>设置会保存到本机，重启后继续生效。</span>
           </div>
@@ -439,6 +509,10 @@ onMounted(load)
   margin-bottom: 12px;
 }
 
+.recovery-policy-panel {
+  margin-bottom: 12px;
+}
+
 .approval-off-label {
   color: var(--red);
 }
@@ -498,6 +572,47 @@ onMounted(load)
 }
 
 .approval-policy-control > span {
+  text-align: right;
+}
+
+.recovery-policy-body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 22px;
+}
+
+.recovery-policy-copy {
+  min-width: 0;
+}
+
+.recovery-policy-copy p {
+  max-width: 860px;
+  margin: 10px 0 5px;
+  color: var(--text-dim);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.recovery-policy-copy small,
+.recovery-policy-control span {
+  color: var(--text-dim);
+  font: 13px/1.5 var(--font-mono);
+}
+
+.recovery-policy-control {
+  display: grid;
+  min-width: 170px;
+  justify-items: end;
+  gap: 10px;
+}
+
+.recovery-policy-control .el-switch {
+  --el-switch-on-color: var(--green);
+}
+
+.recovery-policy-control > span {
   text-align: right;
 }
 
@@ -600,11 +715,23 @@ onMounted(load)
     grid-template-columns: 1fr;
   }
 
+  .recovery-policy-body {
+    grid-template-columns: 1fr;
+  }
+
   .approval-policy-control {
     justify-items: start;
   }
 
   .approval-policy-control > span {
+    text-align: left;
+  }
+
+  .recovery-policy-control {
+    justify-items: start;
+  }
+
+  .recovery-policy-control > span {
     text-align: left;
   }
 }
@@ -633,6 +760,7 @@ onMounted(load)
 .session-panel,
 .policy-panel,
 .approval-policy-panel,
+.recovery-policy-panel,
 .integrity-panel {
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgba(15, 23, 42, .03);

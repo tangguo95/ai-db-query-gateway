@@ -13,6 +13,7 @@
 | `POST` | `/api/auth/logout` | 注销并失效 Session |
 | `GET` | `/api/dashboard` | 安全状态汇总 |
 | `GET/PUT` | `/api/settings/query-approval` | 查看/修改高风险 AI 查询审批开关 |
+| `GET/PUT` | `/api/settings/data-source-recovery` | 查看/修改隔离数据源的自动连接复检开关 |
 | `GET/POST` | `/api/datasources` | 列表/新增数据源 |
 | `GET/PUT/DELETE` | `/api/datasources/{id}` | 查看/更新/软删除 |
 | `POST` | `/api/datasources/{id}/test` | 连接复检（不读取账号授权） |
@@ -37,6 +38,11 @@
 `GET /api/settings/query-approval` 返回 `{ "approvalRequired": true }`。管理员使用 `PUT`
 修改该值；设置写入本地 `app_setting`，优先级高于启动时的
 `GATEWAY_QUERY_APPROVAL_REQUIRED` 默认环境变量。
+
+`GET /api/settings/data-source-recovery` 返回自动复检开关及退避参数。管理员使用 `PUT`
+修改 `autoRetryConnectionChecks`；设置写入本地 `app_setting`，优先级高于启动时的
+`GATEWAY_DATASOURCE_AUTO_RETRY_CONNECTION_CHECKS` 默认环境变量。开启后，后台只对连接状态为
+`UNKNOWN` 且已隔离的数据源执行连接检查，成功后恢复启用；不会执行或重试任何生产 SQL。
 
 ## AI 接口
 

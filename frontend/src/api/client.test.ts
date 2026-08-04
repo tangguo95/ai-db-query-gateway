@@ -148,6 +148,26 @@ describe('API client security behavior', () => {
     expect(body).not.toHaveProperty('database')
   })
 
+  it('updates only the automatic data source connection-check policy', async () => {
+    document.cookie = 'XSRF-TOKEN=proof; path=/'
+    vi.mocked(fetch).mockResolvedValue(response(200, {
+      autoRetryConnectionChecks: true,
+      retryIntervalSeconds: 60,
+      maxBackoffMinutes: 15
+    }))
+
+    const policy = await api.updateDataSourceRecoveryPolicy(true)
+
+    expect(fetch).toHaveBeenCalledWith('/api/settings/data-source-recovery', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({ autoRetryConnectionChecks: true }),
+      headers: expect.objectContaining({
+        'X-XSRF-TOKEN': 'proof'
+      })
+    }))
+    expect(policy.autoRetryConnectionChecks).toBe(true)
+  })
+
   it('uses the scoped DELETE endpoint for data source removal', async () => {
     document.cookie = 'XSRF-TOKEN=proof; path=/'
     vi.mocked(fetch).mockResolvedValue(response(204))

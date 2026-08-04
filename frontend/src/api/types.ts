@@ -31,6 +31,12 @@ export interface QueryApprovalPolicy {
   approvalRequired: boolean
 }
 
+export interface DataSourceRecoveryPolicy {
+  autoRetryConnectionChecks: boolean
+  retryIntervalSeconds: number
+  maxBackoffMinutes: number
+}
+
 export interface DataSourceSummary {
   id: string
   name: string

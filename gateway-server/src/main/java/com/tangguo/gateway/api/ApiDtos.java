@@ -33,6 +33,11 @@ public final class ApiDtos {
 
     public record QueryApprovalPolicyUpdateRequest(boolean approvalRequired) {}
 
+    public record DataSourceRecoveryPolicyView(
+            boolean autoRetryConnectionChecks, int retryIntervalSeconds, int maxBackoffMinutes) {}
+
+    public record DataSourceRecoveryPolicyUpdateRequest(boolean autoRetryConnectionChecks) {}
+
     public record DataSourceCreateRequest(
             @NotBlank @Size(max = 100) String name,
             @NotNull DatabaseType databaseType,

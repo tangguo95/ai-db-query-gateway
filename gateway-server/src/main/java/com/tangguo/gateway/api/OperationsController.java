@@ -2,10 +2,13 @@ package com.tangguo.gateway.api;
 
 import com.tangguo.gateway.api.ApiDtos.AuditPage;
 import com.tangguo.gateway.api.ApiDtos.DashboardView;
+import com.tangguo.gateway.api.ApiDtos.DataSourceRecoveryPolicyUpdateRequest;
+import com.tangguo.gateway.api.ApiDtos.DataSourceRecoveryPolicyView;
 import com.tangguo.gateway.api.ApiDtos.QueryApprovalPolicyUpdateRequest;
 import com.tangguo.gateway.api.ApiDtos.QueryApprovalPolicyView;
 import com.tangguo.gateway.audit.AuditCommand;
 import com.tangguo.gateway.audit.AuditService;
+import com.tangguo.gateway.datasource.DataSourceRecoveryPolicyService;
 import com.tangguo.gateway.model.ActorType;
 import com.tangguo.gateway.query.QueryApprovalPolicyService;
 import com.tangguo.gateway.security.ActorContext;
@@ -28,16 +31,19 @@ public class OperationsController {
     private final AuditService auditService;
     private final ActorContext actorContext;
     private final QueryApprovalPolicyService approvalPolicy;
+    private final DataSourceRecoveryPolicyService dataSourceRecoveryPolicy;
 
     public OperationsController(
             JdbcTemplate jdbcTemplate,
             AuditService auditService,
             ActorContext actorContext,
-            QueryApprovalPolicyService approvalPolicy) {
+            QueryApprovalPolicyService approvalPolicy,
+            DataSourceRecoveryPolicyService dataSourceRecoveryPolicy) {
         this.jdbcTemplate = jdbcTemplate;
         this.auditService = auditService;
         this.actorContext = actorContext;
         this.approvalPolicy = approvalPolicy;
+        this.dataSourceRecoveryPolicy = dataSourceRecoveryPolicy;
     }
 
     @GetMapping("/audits")
@@ -114,6 +120,41 @@ public class OperationsController {
                     null));
         }
         return new QueryApprovalPolicyView(approvalPolicy.approvalRequired());
+    }
+
+    @GetMapping("/settings/data-source-recovery")
+    DataSourceRecoveryPolicyView dataSourceRecoveryPolicy() {
+        return new DataSourceRecoveryPolicyView(
+                dataSourceRecoveryPolicy.autoRetryConnectionChecks(),
+                dataSourceRecoveryPolicy.retryIntervalSeconds(),
+                dataSourceRecoveryPolicy.maxBackoffMinutes());
+    }
+
+    @PutMapping("/settings/data-source-recovery")
+    @Transactional
+    DataSourceRecoveryPolicyView updateDataSourceRecoveryPolicy(
+            @RequestBody DataSourceRecoveryPolicyUpdateRequest request) {
+        boolean previous = dataSourceRecoveryPolicy.autoRetryConnectionChecks();
+        if (previous != request.autoRetryConnectionChecks()) {
+            dataSourceRecoveryPolicy.setAutoRetryConnectionChecks(request.autoRetryConnectionChecks());
+            auditService.record(new AuditCommand(
+                    actorContext.actor(),
+                    ActorType.ADMIN,
+                    "DATASOURCE_AUTO_RECHECK_POLICY_CHANGED",
+                    null,
+                    null,
+                    null,
+                    null,
+                    Map.of(
+                            "autoRetryConnectionChecks", request.autoRetryConnectionChecks(),
+                            "previousAutoRetryConnectionChecks", previous),
+                    "SUCCESS",
+                    null,
+                    null,
+                    null,
+                    null));
+        }
+        return dataSourceRecoveryPolicy();
     }
 
     private long count(String sql) {

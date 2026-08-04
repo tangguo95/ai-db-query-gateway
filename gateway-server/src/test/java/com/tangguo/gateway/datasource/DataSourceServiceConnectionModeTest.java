@@ -30,6 +30,7 @@ class DataSourceServiceConnectionModeTest {
         DataSourceConnectionManager connections = mock(DataSourceConnectionManager.class);
         ConnectorRegistry connectorRegistry = mock(ConnectorRegistry.class);
         AuditService auditService = mock(AuditService.class);
+        DataSourceRecoveryPolicyService recoveryPolicy = mock(DataSourceRecoveryPolicyService.class);
         Connection connection = mock(Connection.class);
         DatabaseMetaData metadata = mock(DatabaseMetaData.class);
         Instant now = Instant.parse("2026-07-30T10:00:00Z");
@@ -64,7 +65,8 @@ class DataSourceServiceConnectionModeTest {
                 objectMapper,
                 connections,
                 connectorRegistry,
-                auditService);
+                auditService,
+                recoveryPolicy);
 
         var result = service.test("ds-1", "admin");
 

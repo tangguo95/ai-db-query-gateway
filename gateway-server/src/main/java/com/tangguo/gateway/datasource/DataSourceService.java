@@ -14,13 +14,13 @@ import com.tangguo.gateway.model.ActorType;
 import com.tangguo.gateway.model.ReadOnlyStatus;
 import com.tangguo.gateway.secret.ConnectionSecret;
 import com.tangguo.gateway.secret.SecretStore;
-import jakarta.annotation.PostConstruct;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,7 +57,9 @@ public class DataSourceService {
     private final DataSourceConnectionManager connections;
     private final ConnectorRegistry connectorRegistry;
     private final AuditService auditService;
+    private final DataSourceRecoveryPolicyService recoveryPolicy;
     private final ConcurrentHashMap<String, ReentrantLock> sourceLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, RecoveryAttempt> recoveryAttempts = new ConcurrentHashMap<>();
 
     public DataSourceService(
             DataSourceRepository repository,
@@ -65,13 +67,15 @@ public class DataSourceService {
             ObjectMapper objectMapper,
             DataSourceConnectionManager connections,
             ConnectorRegistry connectorRegistry,
-            AuditService auditService) {
+            AuditService auditService,
+            DataSourceRecoveryPolicyService recoveryPolicy) {
         this.repository = repository;
         this.secretStore = secretStore;
         this.objectMapper = objectMapper;
         this.connections = connections;
         this.connectorRegistry = connectorRegistry;
         this.auditService = auditService;
+        this.recoveryPolicy = recoveryPolicy;
     }
 
     public List<DataSourceView> list() {
@@ -491,6 +495,52 @@ public class DataSourceService {
             }
         }
     }
+
+    /**
+     * 可选的连接恢复探测。只针对 UNKNOWN/已隔离数据源调用连接复检，不会执行或重试任何业务 SQL。
+     * 失败采用内存退避，避免数据库不可用时每分钟持续建立连接并写入审计。
+     */
+    @Scheduled(initialDelay = 30_000, fixedDelay = 60_000)
+    public void retryIsolatedDataSources() {
+        if (!recoveryPolicy.autoRetryConnectionChecks()) {
+            recoveryAttempts.clear();
+            return;
+        }
+        Instant now = Instant.now();
+        for (DataSourceConfig config : repository.findAll()) {
+            if (config.enabled() || config.readOnlyStatus() != ReadOnlyStatus.UNKNOWN) {
+                recoveryAttempts.remove(config.id());
+                continue;
+            }
+            RecoveryAttempt attempt = recoveryAttempts.get(config.id());
+            if (attempt != null && now.isBefore(attempt.nextAttemptAt())) {
+                continue;
+            }
+            try {
+                DataSourceTestResult result = test(config.id(), "system:connection-recovery");
+                if (result.reachable() && result.enabled()) {
+                    recoveryAttempts.remove(config.id());
+                } else {
+                    recordRecoveryFailure(config.id(), now);
+                }
+            } catch (RuntimeException ignored) {
+                recordRecoveryFailure(config.id(), now);
+            }
+        }
+    }
+
+    private void recordRecoveryFailure(String dataSourceId, Instant now) {
+        RecoveryAttempt previous = recoveryAttempts.get(dataSourceId);
+        int failures = previous == null ? 1 : Math.min(previous.failures() + 1, 31);
+        long multiplier = 1L << Math.min(failures - 1, 4);
+        Duration delay = DataSourceRecoveryPolicyService.RETRY_INTERVAL.multipliedBy(multiplier);
+        if (delay.compareTo(DataSourceRecoveryPolicyService.MAX_BACKOFF) > 0) {
+            delay = DataSourceRecoveryPolicyService.MAX_BACKOFF;
+        }
+        recoveryAttempts.put(dataSourceId, new RecoveryAttempt(failures, now.plus(delay)));
+    }
+
+    private record RecoveryAttempt(int failures, Instant nextAttemptAt) {}
 
     public List<SchemaView> schemas(String id) {
         DataSourceConfig config = requireEnabled(id);

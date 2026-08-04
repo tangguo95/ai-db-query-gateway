@@ -8,6 +8,7 @@ public class GatewayProperties {
     private String dataDir;
     private boolean remoteEnabled;
     private final Secrets secrets = new Secrets();
+    private final DataSource dataSource = new DataSource();
     private final Query query = new Query();
     private final Security security = new Security();
 
@@ -29,6 +30,25 @@ public class GatewayProperties {
 
     public Secrets getSecrets() {
         return secrets;
+    }
+
+    public DataSource getDataSource() {
+        return dataSource;
+    }
+
+    public static class DataSource {
+        /**
+         * 隔离数据源是否允许后台自动发起连接检查；网页设置会持久化覆盖该默认值。
+         */
+        private boolean autoRetryConnectionChecks;
+
+        public boolean isAutoRetryConnectionChecks() {
+            return autoRetryConnectionChecks;
+        }
+
+        public void setAutoRetryConnectionChecks(boolean autoRetryConnectionChecks) {
+            this.autoRetryConnectionChecks = autoRetryConnectionChecks;
+        }
     }
 
     public Query getQuery() {

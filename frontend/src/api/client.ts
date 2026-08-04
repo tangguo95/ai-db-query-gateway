@@ -3,6 +3,7 @@ import type {
   AuditRecord,
   CreateDataSourceRequest,
   CurrentUser,
+  DataSourceRecoveryPolicy,
   Dashboard,
   DataSourceTestResult,
   DataSourceSummary,
@@ -230,6 +231,12 @@ export const api = {
     request<QueryApprovalPolicy>('/api/settings/query-approval', {
       method: 'PUT',
       body: JSON.stringify({ approvalRequired })
+    }),
+  dataSourceRecoveryPolicy: () => request<DataSourceRecoveryPolicy>('/api/settings/data-source-recovery'),
+  updateDataSourceRecoveryPolicy: (autoRetryConnectionChecks: boolean) =>
+    request<DataSourceRecoveryPolicy>('/api/settings/data-source-recovery', {
+      method: 'PUT',
+      body: JSON.stringify({ autoRetryConnectionChecks })
     }),
 
   dataSources: async () => {

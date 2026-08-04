@@ -46,6 +46,9 @@ gateway:
   secrets:
     helper-path: ${GATEWAY_KEYCHAIN_HELPER:native/macos-keychain/build/keychain-helper}
     allow-in-memory: ${GATEWAY_ALLOW_IN_MEMORY_SECRETS:false}
+  data-source:
+    # 仅作为首次启动默认值；网页安全设置中的管理员开关会持久化覆盖它。
+    auto-retry-connection-checks: ${GATEWAY_DATASOURCE_AUTO_RETRY_CONNECTION_CHECKS:false}
   query:
     default-max-rows: 200
     hard-max-rows: 1000
