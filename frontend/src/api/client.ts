@@ -1,5 +1,6 @@
 import type {
   AccessTokenSummary,
+  AdminProfile,
   AuditRecord,
   CreateDataSourceRequest,
   CurrentUser,
@@ -223,6 +224,18 @@ export const api = {
     request<CurrentUser>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
   currentUser: () => request<CurrentUser>('/api/auth/me'),
+
+  profile: () => request<AdminProfile>('/api/profile'),
+  updateProfile: (body: { displayName?: string; avatarDataUrl?: string | null }) =>
+    request<AdminProfile>('/api/profile', {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
+  changePassword: (body: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+    request<void>('/api/profile/password', {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    }),
 
   dashboard: async () => dashboard(await request<JsonRecord>('/api/dashboard')),
 

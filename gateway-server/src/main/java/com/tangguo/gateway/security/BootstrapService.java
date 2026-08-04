@@ -77,6 +77,22 @@ public class BootstrapService {
         return settings.get(ADMIN_HASH).map(hash -> passwordEncoder.matches(password, hash)).orElse(false);
     }
 
+    public synchronized void changePassword(String currentPassword, String newPassword) {
+        if (!isInitialized()) {
+            throw new com.tangguo.gateway.api.GatewayException(
+                    org.springframework.http.HttpStatus.CONFLICT, "NOT_INITIALIZED", "管理员尚未初始化");
+        }
+        if (!verifyPassword(currentPassword)) {
+            throw new com.tangguo.gateway.api.GatewayException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "INVALID_CURRENT_PASSWORD", "当前密码错误");
+        }
+        if (passwordEncoder.matches(newPassword, settings.get(ADMIN_HASH).orElse(""))) {
+            throw new com.tangguo.gateway.api.GatewayException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST, "PASSWORD_REUSE", "新密码不能与当前密码相同");
+        }
+        settings.put(ADMIN_HASH, passwordEncoder.encode(newPassword));
+    }
+
     String currentBootstrapTokenForTests() {
         return currentBootstrapToken;
     }

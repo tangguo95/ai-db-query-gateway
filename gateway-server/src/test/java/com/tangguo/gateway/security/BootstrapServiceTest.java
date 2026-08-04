@@ -54,4 +54,19 @@ class BootstrapServiceTest {
         assertThatThrownBy(() -> bootstrapService.setup(token, "another-long-password"))
                 .isInstanceOf(GatewayException.class);
     }
+
+    @Test
+    void changesPasswordOnlyAfterVerifyingTheCurrentPassword() {
+        String token = bootstrapService.currentBootstrapTokenForTests();
+        bootstrapService.setup(token, "a-very-long-admin-password");
+
+        assertThatThrownBy(() -> bootstrapService.changePassword("wrong-password", "another-long-password"))
+                .isInstanceOfSatisfying(GatewayException.class, exception ->
+                        assertThat(exception.code()).isEqualTo("INVALID_CURRENT_PASSWORD"));
+
+        bootstrapService.changePassword("a-very-long-admin-password", "another-long-password");
+
+        assertThat(bootstrapService.verifyPassword("a-very-long-admin-password")).isFalse();
+        assertThat(bootstrapService.verifyPassword("another-long-password")).isTrue();
+    }
 }

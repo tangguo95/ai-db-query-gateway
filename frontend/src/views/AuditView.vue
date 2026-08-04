@@ -24,6 +24,9 @@ const filters = reactive({
 
 const eventLabels: Record<string, string> = {
   AUDIT_VIEWED: '查看审计记录',
+  ADMIN_PASSWORD_CHANGED: '修改管理员密码',
+  ADMIN_PASSWORD_CHANGE_FAILED: '修改管理员密码失败',
+  ADMIN_PROFILE_UPDATED: '更新用户信息',
   DATASOURCE_CREATED: '新增数据源',
   DATASOURCE_CREATE_REQUESTED: '申请新增数据源',
   DATASOURCE_CREDENTIAL_CHANGED: '更新数据源凭据',
@@ -97,6 +100,8 @@ const errorLabels: Record<string, string> = {
   AUDIT_CHAIN_INVALID: '审计链校验失败',
   AUDIT_UNAVAILABLE: '审计服务不可用',
   DATABASE_QUERY_FAILED: '数据库查询失败',
+  INVALID_CURRENT_PASSWORD: '当前密码错误',
+  PASSWORD_REUSE: '新密码不能与当前密码相同',
   QUERY_CANCELLED: '查询已取消',
   QUERY_TIMEOUT: '查询执行超时',
   QUERY_POLICY_REJECTED: 'SQL 策略拒绝',
@@ -248,6 +253,7 @@ onMounted(load)
             <el-option label="数据源操作" value="DATASOURCE" />
             <el-option label="访问令牌" value="TOKEN" />
             <el-option label="登录认证" value="LOGIN" />
+            <el-option label="用户设置" value="ADMIN" />
           </el-select>
         </div>
         <div>

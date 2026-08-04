@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +29,22 @@ public final class ApiDtos {
     public record LoginRequest(@NotBlank @Size(max = 256) String password) {}
 
     public record CurrentUser(boolean authenticated, String username, List<String> roles) {}
+
+    public record AdminProfileView(String username, String displayName, String avatarDataUrl) {}
+
+    public record AdminProfileUpdateRequest(
+            @Size(max = 64) String displayName,
+            @Size(max = 7_000_000) String avatarDataUrl) {}
+
+    public record PasswordChangeRequest(
+            @NotBlank @Size(max = 256) String currentPassword,
+            @NotBlank @Size(min = 12, max = 256) String newPassword,
+            @NotBlank @Size(min = 12, max = 256) String confirmPassword) {
+        @AssertTrue(message = "两次输入的新密码不一致")
+        public boolean passwordsMatch() {
+            return Objects.equals(newPassword, confirmPassword);
+        }
+    }
 
     public record QueryApprovalPolicyView(boolean approvalRequired) {}
 

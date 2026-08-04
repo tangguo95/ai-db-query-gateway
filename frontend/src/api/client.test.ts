@@ -168,6 +168,53 @@ describe('API client security behavior', () => {
     expect(policy.autoRetryConnectionChecks).toBe(true)
   })
 
+  it('loads and updates the local administrator profile without transforming the avatar data URL', async () => {
+    document.cookie = 'XSRF-TOKEN=proof; path=/'
+    vi.mocked(fetch).mockResolvedValue(response(200, {
+      username: 'admin',
+      displayName: '数据管理员',
+      avatarDataUrl: 'data:image/gif;base64,R0lGODlh'
+    }))
+
+    const profile = await api.profile()
+    const updated = await api.updateProfile({
+      displayName: profile.displayName,
+      avatarDataUrl: profile.avatarDataUrl
+    })
+
+    expect(profile.avatarDataUrl).toContain('data:image/gif')
+    expect(updated.displayName).toBe('数据管理员')
+    expect(fetch).toHaveBeenLastCalledWith('/api/profile', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        displayName: '数据管理员',
+        avatarDataUrl: 'data:image/gif;base64,R0lGODlh'
+      }),
+      headers: expect.objectContaining({ 'X-XSRF-TOKEN': 'proof' })
+    }))
+  })
+
+  it('sends password changes through the protected profile endpoint', async () => {
+    document.cookie = 'XSRF-TOKEN=proof; path=/'
+    vi.mocked(fetch).mockResolvedValue(response(204))
+
+    await api.changePassword({
+      currentPassword: 'current-password',
+      newPassword: 'new-password-123',
+      confirmPassword: 'new-password-123'
+    })
+
+    expect(fetch).toHaveBeenCalledWith('/api/profile/password', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        currentPassword: 'current-password',
+        newPassword: 'new-password-123',
+        confirmPassword: 'new-password-123'
+      }),
+      headers: expect.objectContaining({ 'X-XSRF-TOKEN': 'proof' })
+    }))
+  })
+
   it('uses the scoped DELETE endpoint for data source removal', async () => {
     document.cookie = 'XSRF-TOKEN=proof; path=/'
     vi.mocked(fetch).mockResolvedValue(response(204))

@@ -27,6 +27,12 @@ export interface CurrentUser {
   idleExpiresAt?: string
 }
 
+export interface AdminProfile {
+  username: string
+  displayName: string
+  avatarDataUrl?: string
+}
+
 export interface QueryApprovalPolicy {
   approvalRequired: boolean
 }

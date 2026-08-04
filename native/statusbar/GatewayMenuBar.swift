@@ -124,7 +124,7 @@ final class GatewayMenuBarApplication: NSObject, NSApplicationDelegate {
     }
 
     private func configureStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
             if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
                let icon = NSImage(contentsOf: iconURL) {
@@ -135,7 +135,8 @@ final class GatewayMenuBarApplication: NSObject, NSApplicationDelegate {
                 button.image = NSImage(systemSymbolName: "server.rack", accessibilityDescription: "查询网关")
                 button.image?.isTemplate = true
             }
-            button.imagePosition = .imageLeading
+            button.imagePosition = .imageOnly
+            button.title = ""
             button.toolTip = "查询网关"
         }
 
@@ -218,7 +219,8 @@ final class GatewayMenuBarApplication: NSObject, NSApplicationDelegate {
         restartItem.isEnabled = !busy && status != .unknown
 
         if let button = statusItem.button {
-            button.title = "网关"
+            button.title = ""
+            button.imagePosition = .imageOnly
             button.toolTip = "查询网关：\(status.title)"
         }
     }
