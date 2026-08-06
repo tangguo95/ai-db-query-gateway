@@ -718,7 +718,7 @@ onMounted(load)
 }
 
 .token-list article:hover {
-  background: #fbfdff;
+  background: var(--bg-panel-2);
 }
 
 .token-symbol {
