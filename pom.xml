@@ -24,6 +24,7 @@
     <modules>
         <module>gateway-server</module>
         <module>gateway-mcp</module>
+        <module>gateway-tray</module>
     </modules>
 
     <properties>

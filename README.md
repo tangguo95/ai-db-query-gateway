@@ -11,16 +11,17 @@ MySQL and OceanBase databases. A browser console stores data-source credentials 
 the REST API applies the query policy, and a small MCP STDIO adapter exposes only the
 approved read-query tools to Codex, Claude, or another local AI client.
 
-The project is designed for a single macOS workstation. It replaces copying database
-addresses and passwords into every AI conversation with one local security boundary.
+The project is designed for a single macOS or Windows workstation. It replaces copying
+database addresses and passwords into every AI conversation with one local security boundary.
 
 ![Login screen](docs/images/login.png)
 
 ## What it does
 
 - Supports MySQL, OceanBase MySQL mode, and OceanBase Oracle mode through a connector SPI.
-- Keeps database credentials and audit encryption keys in macOS Keychain; SQLite stores
-  metadata, scope information, and the audit chain rather than plaintext credentials.
+- Keeps database credentials and audit encryption keys in macOS Keychain or Windows current-user
+  DPAPI-protected ciphertext files; SQLite stores metadata, scope information, and the audit chain
+  rather than plaintext credentials.
 - Lets an administrator manage data sources, approvals, scoped API tokens, and audit events
   from the web console.
 - Exposes eight fixed MCP tools: list data sources, inspect schemas/tables, describe a table,
@@ -55,7 +56,7 @@ AI client ── STDIO ── MCP ── token ──> Spring Boot gateway
                                       ├─ authentication and token scope
                                       ├─ SQL AST policy and approval workflow
                                       ├─ SQLite control plane and chained HMAC audit
-                                      ├─ macOS Keychain secret references
+                                      ├─ macOS Keychain / Windows DPAPI secret references
                                       └─ bounded JDBC pools ──> MySQL / OceanBase
 ```
 
@@ -65,9 +66,9 @@ Spring TLS configuration.
 
 ## Requirements
 
-- macOS with Keychain access
+- macOS with Keychain access, or Windows 10/11 with current-user DPAPI
 - Java 21
-- Xcode Command Line Tools (to build the Swift Keychain helper)
+- Xcode Command Line Tools (macOS only, to build the Swift Keychain helper)
 - Docker Desktop is optional and useful for MySQL integration tests
 - Internet access on the first build so Maven and the pinned Node/npm runtime can be downloaded
 
@@ -76,6 +77,8 @@ system-wide Node installation is not required.
 
 ## Quick start
 
+### macOS
+
 ```bash
 git clone https://github.com/tangguo95/ai-db-query-gateway.git
 cd ai-db-query-gateway
@@ -83,12 +86,25 @@ cd ai-db-query-gateway
 ./scripts/launchd.sh start
 ```
 
+### Windows PowerShell
+
+```powershell
+git clone https://github.com/tangguo95/ai-db-query-gateway.git
+Set-Location ai-db-query-gateway
+.\scripts\build.ps1
+.\scripts\windows-service.ps1 start
+.\scripts\run-tray.ps1
+```
+
 Open <http://127.0.0.1:8765>. On the first launch the service creates a one-time
 `bootstrap-token` file at:
 
 ```text
-~/Library/Application Support/AI DB Query Gateway/bootstrap-token
+macOS:   ~/Library/Application Support/AI DB Query Gateway/bootstrap-token
+Windows: %LOCALAPPDATA%\AI DB Query Gateway\bootstrap-token
 ```
+
+Set `GATEWAY_DATA_DIR` to override the runtime directory on either platform.
 
 Read the token locally and enter it in the setup page to choose the local administrator
 password. The token is deleted after successful setup and the password is stored only as an
@@ -97,12 +113,13 @@ Argon2id hash.
 The default runtime directory is:
 
 ```text
-~/Library/Application Support/AI DB Query Gateway/
+macOS:   ~/Library/Application Support/AI DB Query Gateway/
+Windows: %LOCALAPPDATA%\AI DB Query Gateway\
 ```
 
-It contains the SQLite control database and bootstrap state. Database credentials and audit
-keys are stored separately in Keychain under the application service; they are not put in the
-repository, process arguments, environment variables, or ordinary logs.
+It contains the SQLite control database and bootstrap state. Database credentials and audit keys
+are stored separately in the platform secure store; they are not put in the repository, process
+arguments, environment variables, or ordinary logs.
 
 The launchd command is a manually loaded user service, not a login shortcut. It stays running
 after the terminal is closed and restarts after an unexpected crash, but it is not loaded after
@@ -115,6 +132,22 @@ macOS login or reboot. Use these commands when needed:
 
 For foreground troubleshooting, use `./scripts/run.sh` instead. The foreground command is tied
 to its terminal and will stop when that terminal session ends.
+
+On Windows, use `.\scripts\run.ps1` for foreground troubleshooting and
+`.\scripts\windows-service.ps1 {status|stop|restart}` for the background process.
+
+### Windows notification-area manager
+
+`.\scripts\build.ps1` also builds a standalone Windows app image. To launch the tray app:
+
+```powershell
+.\scripts\run-tray.ps1
+```
+
+It refreshes the local gateway health every five seconds and provides start, stop, restart,
+the Web console, and the service log directory from its notification-area menu. The generated
+executable is under `gateway-tray\build\app-image\AI DB Query Gateway Tray\` and includes its
+own Java runtime and gateway server artifact.
 
 ### macOS menu bar manager
 
@@ -133,16 +166,28 @@ service logs. It does not enable login startup and does not handle database cred
 1. Add and test a data source in the web console.
 2. Create a short-lived token and select only the data sources the client needs. Confirm the
    result-sharing warning before saving it.
-3. Store the token in the local macOS Keychain helper:
+3. Store the token in the local platform secure store. On macOS:
 
    ```bash
    ./scripts/configure-mcp-token.sh
+   ```
+
+   On Windows PowerShell:
+
+   ```powershell
+   .\scripts\configure-mcp-token.ps1
    ```
 
 4. Start the MCP adapter in a separate terminal or from the client configuration:
 
    ```bash
    ./scripts/run-mcp.sh
+   ```
+
+   On Windows PowerShell:
+
+   ```powershell
+   .\scripts\run-mcp.ps1
    ```
 
 For clients that manage MCP processes themselves, use the generated JAR and keep the token in
@@ -188,7 +233,7 @@ per data source, four globally, and 30 requests per token per minute. These valu
 server-side limits; clients cannot raise them.
 
 Read [SECURITY.md](SECURITY.md) before connecting a production database. It documents the
-same-user macOS shell boundary, the limits of local chained-HMAC audit protection, cancellation
+same-user macOS/Windows shell boundary, the limits of local chained-HMAC audit protection, cancellation
 semantics, TLS choices, and the risk that an AI provider may receive raw query results.
 
 ## Project layout
@@ -196,11 +241,12 @@ semantics, TLS choices, and the risk that an AI provider may receive raw query r
 ```text
 gateway-server/          Spring Boot API, policy, JDBC execution, audit, and static hosting
 gateway-mcp/              MCP 2024-11-05 STDIO adapter without database drivers
+gateway-tray/             Windows notification-area app and jpackage packaging input
 frontend/                 Vue 3 + TypeScript web console
 native/macos-keychain/    Swift Security.framework helper
 native/statusbar/         macOS menu bar gateway manager
 docs/                     REST, MCP, architecture, and testing documentation
-scripts/                  Reproducible build, run, and token setup scripts
+scripts/                  Reproducible build, run, and token setup scripts (shell and PowerShell)
 ```
 
 ## Development and verification
@@ -209,8 +255,11 @@ scripts/                  Reproducible build, run, and token setup scripts
 ./mvnw clean verify
 ```
 
-The verification build runs Java, MCP, and frontend tests, type-checks the Vue application,
-builds the static assets, and packages the two JARs. Docker-backed MySQL tests run when Docker
+On Windows PowerShell, use `.\mvnw.cmd clean verify`.
+
+The verification build runs Java, MCP, frontend, and tray tests, type-checks the Vue application,
+builds the static assets, and packages the gateway, MCP, and tray JARs. On Windows,
+`scripts/build.ps1` also creates the standalone tray app-image. Docker-backed MySQL tests run when Docker
 is available. OceanBase connector compatibility should be checked against a non-production
 tenant before use.
 

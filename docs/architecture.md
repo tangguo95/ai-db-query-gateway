@@ -4,11 +4,12 @@
 浏览器 ── Session + CSRF ──────────────┐
                                        v
 AI 客户端 ── STDIO ── MCP ── Bearer ─> Spring Boot 网关
+Windows 托盘 ── health / service control ─┘
                                       │
                                       ├─ 认证、作用域、限流
                                       ├─ AST 策略与风险审批
                                       ├─ SQLite 控制面与 HMAC 审计链
-                                      ├─ macOS Keychain secretRef
+                                      ├─ macOS Keychain / Windows DPAPI secretRef
                                       └─ 有界 JDBC 池 ──> MySQL / OceanBase
 ```
 
@@ -18,10 +19,11 @@ Spring Boot 服务是唯一策略决定点和唯一数据库连接方。MCP 只�
 ## 模块边界
 
 - `api/security`：网页会话、CSRF、Bearer、Host/Origin、限流和 DTO。
-- `datasource`：连接器 SPI、服务端 JDBC URL、Keychain 解引用、连接检查和元数据。
+- `datasource`：连接器 SPI、服务端 JDBC URL、平台安全存储解引用、连接检查和元数据。
 - `query`：AST、风险、审批状态、并发预算、执行、取消和结果截断。
 - `audit`：敏感载荷加密、同步预写、链式 HMAC、启动/每日校验。
 - `gateway-mcp`：MCP 2024-11-05 握手、固定工具 Schema、并发和补偿取消。
+- `gateway-tray`：Windows 系统托盘状态查看和服务控制，不读取或处理数据库凭据。
 - `native/macos-keychain`：只接受 stdin JSON 的 Security.framework helper。
 
 ## 数据源状态
@@ -90,11 +92,14 @@ SQLite 保存：
 - API Token 摘要、作用域和有效期；
 - 加密查询申请、审批状态和审计链。
 
-Keychain 保存：
+平台安全存储保存：
 
 - 完整数据库连接资料；
 - 审计 AES-256-GCM 密钥；
 - 审计 HMAC 密钥。
+
+macOS 使用 Swift Security.framework 访问 Keychain；Windows 使用当前用户 DPAPI 加密运行
+目录下的密文文件。两者都不把秘密放入 SQLite、进程参数或普通日志。
 
 永不保存查询结果。完整 SQL/参数虽然会作为加密查询申请和加密审计载荷落盘，但不会
 出现在明文列、普通日志或 MCP stderr。

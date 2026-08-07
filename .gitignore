@@ -11,6 +11,7 @@ target/
 frontend/node_modules/
 frontend/dist/
 native/macos-keychain/build/
+gateway-tray/build/
 
 .env
 .env.*

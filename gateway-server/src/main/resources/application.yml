@@ -41,7 +41,8 @@ management:
       show-details: never
 
 gateway:
-  data-dir: ${GATEWAY_DATA_DIR:${user.home}/Library/Application Support/AI DB Query Gateway}
+  # GatewayApplication resolves the platform-native default before Spring starts.
+  data-dir: ${GATEWAY_DATA_DIR:${user.home}/.ai-db-query-gateway}
   remote-enabled: ${GATEWAY_REMOTE_ENABLED:false}
   secrets:
     helper-path: ${GATEWAY_KEYCHAIN_HELPER:native/macos-keychain/build/keychain-helper}

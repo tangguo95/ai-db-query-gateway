@@ -1,5 +1,6 @@
 package com.tangguo.gateway.security;
 
+import com.tangguo.gateway.config.FileSecurity;
 import com.tangguo.gateway.config.GatewayProperties;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
@@ -9,12 +10,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.Set;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -112,9 +111,7 @@ public class BootstrapService {
         try {
             Files.createDirectories(parent);
             temporary = Files.createTempFile(parent, ".bootstrap-token-", ".tmp");
-            Files.setPosixFilePermissions(
-                    temporary,
-                    Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+            FileSecurity.setOwnerOnlyFile(temporary);
             Files.writeString(
                     temporary,
                     token + System.lineSeparator(),
@@ -129,9 +126,7 @@ public class BootstrapService {
             } catch (AtomicMoveNotSupportedException exception) {
                 Files.move(temporary, bootstrapTokenFile, StandardCopyOption.REPLACE_EXISTING);
             }
-            Files.setPosixFilePermissions(
-                    bootstrapTokenFile,
-                    Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+            FileSecurity.setOwnerOnlyFile(bootstrapTokenFile);
         } catch (IOException | UnsupportedOperationException exception) {
             if (temporary != null) {
                 try {

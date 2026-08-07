@@ -1,6 +1,7 @@
 package com.tangguo.gateway.secret;
 
 import com.tangguo.gateway.config.GatewayProperties;
+import com.tangguo.gateway.config.GatewayDataDirectory;
 import java.nio.file.Path;
 import java.util.Arrays;
 import org.springframework.context.annotation.Bean;
@@ -20,8 +21,12 @@ public class SecretStoreConfiguration {
             }
             return new InMemorySecretStore();
         }
-        if (!System.getProperty("os.name", "").toLowerCase().contains("mac")) {
-            throw new IllegalStateException("非 macOS 环境必须在非生产环境显式启用内存凭据存储");
+        if (GatewayDataDirectory.isWindows()) {
+            Path dataDirectory = Path.of(properties.getDataDir()).toAbsolutePath().normalize();
+            return new WindowsDpapiSecretStore(dataDirectory.resolve("secrets"));
+        }
+        if (!GatewayDataDirectory.isMacOs()) {
+            throw new IllegalStateException("当前系统没有可用的安全凭据存储；仅支持 macOS Keychain 或 Windows DPAPI");
         }
         Path path = Path.of(properties.getSecrets().getHelperPath());
         if (!path.isAbsolute()) {

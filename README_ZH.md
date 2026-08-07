@@ -10,16 +10,16 @@
 OceanBase。管理员在网页中维护数据源，REST API 统一执行查询策略，本地 MCP STDIO
 适配器只向 Codex、Claude 或其他本地 AI 客户端暴露固定的查询工具。
 
-当前版本面向单台 macOS 电脑，解决“每次 AI 会话都要粘贴数据库地址、账号和密码”的问题，
-把凭据、查询策略、审批和审计收敛到本机边界内。
+当前版本面向单台 macOS 或 Windows 电脑，解决“每次 AI 会话都要粘贴数据库地址、账号和密码”
+的问题，把凭据、查询策略、审批和审计收敛到本机边界内。
 
 ![登录页面](docs/images/login.png)
 
 ## 功能概览
 
 - 支持 MySQL、OceanBase MySQL 模式和 OceanBase Oracle 模式，并通过连接器 SPI 预留扩展点。
-- 数据库凭据和审计加密密钥保存在 macOS Keychain；SQLite 保存元数据、作用域和审计链，
-  不保存明文凭据。
+- 数据库凭据和审计加密密钥保存在 macOS Keychain 或 Windows 当前用户 DPAPI 保护的本地密文文件；
+  SQLite 保存元数据、作用域和审计链，不保存明文凭据。
 - 网页端管理数据源、审批、作用域令牌和审计轨迹。
 - MCP 只提供八个固定工具：列出数据源、查看 Schema/表、查看表结构、执行查询、查看查询
   请求、执行已批准查询和取消查询。
@@ -49,7 +49,7 @@ AI 客户端 ── STDIO ── MCP ──令牌──> Spring Boot 网关
                                   ├─ 登录认证和令牌作用域
                                   ├─ SQL AST 策略和风险审批
                                   ├─ SQLite 控制面与链式 HMAC 审计
-                                  ├─ macOS Keychain 凭据引用
+                                  ├─ macOS Keychain / Windows DPAPI 凭据引用
                                   └─ 有界 JDBC 连接池 ──> MySQL / OceanBase
 ```
 
@@ -58,9 +58,9 @@ AI 客户端 ── STDIO ── MCP ──令牌──> Spring Boot 网关
 
 ## 环境要求
 
-- 可访问 Keychain 的 macOS
+- macOS（可访问 Keychain）或 Windows 10/11（当前用户 DPAPI）
 - Java 21
-- Xcode Command Line Tools（编译 Swift Keychain helper）
+- Xcode Command Line Tools（仅 macOS 编译 Swift Keychain helper）
 - Docker Desktop（可选，用于 MySQL 集成测试）
 - 首次构建时可访问 Maven Central、Node.js 和 npm registry
 
@@ -69,6 +69,8 @@ Node。
 
 ## 快速开始
 
+### macOS
+
 ```bash
 git clone https://github.com/tangguo95/ai-db-query-gateway.git
 cd ai-db-query-gateway
@@ -76,11 +78,21 @@ cd ai-db-query-gateway
 ./scripts/launchd.sh start
 ```
 
+### Windows PowerShell
+
+```powershell
+git clone https://github.com/tangguo95/ai-db-query-gateway.git
+Set-Location ai-db-query-gateway
+.\scripts\build.ps1
+.\scripts\windows-service.ps1 start
+.\scripts\run-tray.ps1
+```
+
 打开 <http://127.0.0.1:8765>。第一次启动时，服务会创建一次性文件：
 
-```text
-~/Library/Application Support/AI DB Query Gateway/bootstrap-token
-```
+macOS 路径为 `~/Library/Application Support/AI DB Query Gateway/bootstrap-token`；Windows
+路径为 `%LOCALAPPDATA%\AI DB Query Gateway\bootstrap-token`。也可以通过
+`GATEWAY_DATA_DIR` 指定运行目录。
 
 只在本机读取该文件，将令牌输入初始化页面并设置本地管理员密码。初始化成功后文件会删除，
 密码只保存为 Argon2id 摘要。
@@ -88,11 +100,12 @@ cd ai-db-query-gateway
 默认运行目录为：
 
 ```text
-~/Library/Application Support/AI DB Query Gateway/
+macOS:   ~/Library/Application Support/AI DB Query Gateway/
+Windows: %LOCALAPPDATA%\AI DB Query Gateway\
 ```
 
-其中包含 SQLite 控制库和初始化状态。数据库凭据与审计密钥独立保存在 Keychain，不会进入
-仓库、进程参数、环境变量或普通日志。
+其中包含 SQLite 控制库和初始化状态。数据库凭据与审计密钥独立保存在平台安全存储中，不会
+进入仓库、进程参数、环境变量或普通日志。
 
 `launchd` 这里是手动加载的用户服务，不是登录快捷方式：关闭终端后服务仍会运行，异常退出会自动
 重启；但它不会在登录 macOS 或重启电脑后自动加载。按需使用以下命令：
@@ -104,6 +117,32 @@ cd ai-db-query-gateway
 ```
 
 如果需要前台排查日志，可以使用 `./scripts/run.sh`。前台命令依赖当前终端，终端会话结束后服务也会停止。
+
+Windows 前台排查使用：
+
+```powershell
+.\scripts\run.ps1
+```
+
+Windows 后台服务的状态、停止和重启：
+
+```powershell
+.\scripts\windows-service.ps1 status
+.\scripts\windows-service.ps1 stop
+.\scripts\windows-service.ps1 restart
+```
+
+### Windows 系统托盘应用
+
+`.\scripts\build.ps1` 会同时构建独立的 Windows 托盘应用。启动它：
+
+```powershell
+.\scripts\run-tray.ps1
+```
+
+托盘应用每五秒刷新一次网关健康状态，并提供启动、停止、重启网关、打开 Web 控制台和打开日志目录
+等操作。生成的可执行文件位于
+`gateway-tray\build\app-image\AI DB Query Gateway Tray\`，目录内包含独立 Java 运行时和网关服务 JAR。
 
 ### macOS 菜单栏管理工具
 
@@ -121,16 +160,28 @@ open "native/statusbar/build/AI DB Query Gateway.app"
 
 1. 在网页中新增并测试数据源。
 2. 创建短期令牌，只勾选客户端需要的数据源，并确认结果可能发送给 AI 的提示。
-3. 在终端把令牌保存到本机 Keychain：
+3. 在终端把令牌保存到本机安全存储。macOS 使用 Keychain：
 
    ```bash
    ./scripts/configure-mcp-token.sh
+   ```
+
+   Windows PowerShell 使用当前用户 DPAPI：
+
+   ```powershell
+   .\scripts\configure-mcp-token.ps1
    ```
 
 4. 启动 MCP 适配器：
 
    ```bash
    ./scripts/run-mcp.sh
+   ```
+
+   Windows PowerShell：
+
+   ```powershell
+   .\scripts\run-mcp.ps1
    ```
 
 如果客户端自行管理 MCP 子进程，可使用生成的 JAR，并把令牌放在客户端私有配置中：
@@ -168,7 +219,7 @@ open "native/statusbar/build/AI DB Query Gateway.app"
 数据源超时 5–30 秒；每个数据源最多并发 2 条、全局最多 4 条；每个令牌每分钟最多 30 次。
 这些是服务端限制，客户端不能提高。
 
-连接生产库前请阅读 [SECURITY.md](SECURITY.md)，其中说明了同一 macOS 用户的 Shell 边界、
+连接生产库前请阅读 [SECURITY.md](SECURITY.md)，其中说明了同一操作系统用户的 Shell 边界、
 本地链式 HMAC 审计的能力范围、取消语义、TLS 选择，以及 AI 服务商可能接收到原始查询结果的
 风险。
 
@@ -177,11 +228,12 @@ open "native/statusbar/build/AI DB Query Gateway.app"
 ```text
 gateway-server/          Spring Boot API、策略、JDBC 执行、审计和静态资源托管
 gateway-mcp/              不包含数据库驱动的 MCP 2024-11-05 STDIO 适配器
+gateway-tray/             Windows 系统托盘应用和 jpackage 打包输入
 frontend/                 Vue 3 + TypeScript 网页控制台
 native/macos-keychain/    Swift Security.framework helper
 native/statusbar/         macOS 菜单栏网关管理工具
 docs/                     REST、MCP、架构和测试文档
-scripts/                  可复现构建、启动和令牌配置脚本
+scripts/                  可复现构建、启动和令牌配置脚本（含 macOS shell / Windows PowerShell）
 ```
 
 ## 开发与验证
@@ -190,8 +242,15 @@ scripts/                  可复现构建、启动和令牌配置脚本
 ./mvnw clean verify
 ```
 
-该命令会运行 Java、MCP 和前端测试，执行 Vue 类型检查和生产构建，并打包两个 JAR。Docker
-可用时会运行 MySQL 测试；OceanBase 驱动兼容性应先在非生产租户验证。
+Windows PowerShell 等价命令：
+
+```powershell
+.\mvnw.cmd clean verify
+```
+
+该命令会运行 Java、MCP、前端和托盘应用测试，执行 Vue 类型检查和生产构建，并打包网关、MCP
+和托盘应用 JAR。Windows 的 `scripts\build.ps1` 还会生成独立的托盘 app-image。Docker 可用时
+会运行 MySQL 测试；OceanBase 驱动兼容性应先在非生产租户验证。
 
 更多信息请查看 [docs/testing.md](docs/testing.md)、[docs/api.md](docs/api.md)、
 [docs/mcp.md](docs/mcp.md) 和 [docs/architecture.md](docs/architecture.md)。

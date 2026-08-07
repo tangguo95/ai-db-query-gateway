@@ -10,7 +10,8 @@ AI DB Query Gateway 是本机查询安全边界，不是数据库权限系统的
 - 所有非查询 SQL 在创建业务库 JDBC 连接前拒绝；未知语法和未知函数 fail-closed。
 - 数据源不读取数据库账号授权；连接成功后统一进入 `COMPATIBILITY`，每次查询审计
   都明确标记为应用层只读。
-- 连接配置和审计密钥进入 macOS Keychain；SQLite 不保存地址、用户名或密码。
+- 连接配置和审计密钥进入 macOS Keychain 或 Windows 当前用户 DPAPI 保护的密文文件；
+  SQLite 不保存地址、用户名或密码。
 - API Token 为 256 位随机值，只显示一次，SQLite 只保存 SHA-256 摘要和数据源范围。
 - 完整 SQL 与参数仅保存 AES-256-GCM 密文；审计链校验失败后业务操作中止。
 - 查询结果不持久化，不导出，网页按纯文本渲染。为便于管理员在审计轨迹中复核刚执行的查询，
@@ -19,19 +20,18 @@ AI DB Query Gateway 是本机查询安全边界，不是数据库权限系统的
 
 ## 明确不能保证什么
 
-### 同一 macOS 用户的 Shell 权限
+### 同一操作系统用户的 Shell 权限
 
-当前 Swift helper 使用当前登录用户的 Keychain。若 AI 或其它进程拥有与网关相同
-macOS 用户的任意 Shell/文件执行权限，它可以直接运行 helper、读取该用户可访问的
-Keychain 条目，或读取 MCP Token 的客户端私有配置。helper 的所有者、权限、符号链接
-和启动后 SHA-256 校验只能防止误配置与运行期替换，不能在同一 UID 内建立真正隔离。
+macOS 使用当前登录用户的 Keychain；Windows 使用当前用户 DPAPI 加密运行目录下的密文
+文件。若 AI 或其它进程拥有与网关相同操作系统用户的任意 Shell/文件执行权限，它可以
+调用同一用户可访问的安全存储，或读取 MCP Token 的客户端私有配置。平台安全存储和文件
+校验只能防止误配置与运行期替换，不能在同一用户内建立真正隔离。
 
 因此安全部署分两种：
 
 - AI 只有作用域 MCP 工具、没有任意 Shell：当前本机架构能隔离数据库凭据。
-- AI 同时拥有任意 Shell：应把网关运行在独立 macOS 用户下，不授予 AI 该用户的
-  文件、进程和 Keychain 访问；更完整的后续方案是签名的 Hardened Runtime App +
-  XPC helper，并通过 audit token 校验调用方。
+- AI 同时拥有任意 Shell：应把网关运行在独立 macOS/Windows 用户下，不授予 AI 该用户的
+  文件、进程和安全存储访问；更完整的后续方案是签名的系统服务，并校验调用方身份。
 
 不要向拥有同一用户 Shell 权限的 AI 宣称“它绝不可能读取凭据”。
 
@@ -61,14 +61,15 @@ REST 客户端被强制杀死、网络栈没有及时向 Servlet 容器报告断
 
 ## 本机与网络边界
 
-- 默认只监听 `127.0.0.1`；不要随意使用反向代理、端口转发或共享 macOS 账号。
+- 默认只监听 `127.0.0.1`；不要随意使用反向代理、端口转发或共享操作系统账号。
 - 非回环地址只有在 `gateway.remote-enabled=true` 且 Spring TLS 已启用时才可启动。
   第一版没有团队 RBAC、OIDC 或远程 MCP，因此不建议启用远程模式。
 - `scripts/run.sh` 拒绝缺失、不可执行或符号链接形式的 Keychain helper；Java 进程还会
   校验 owner、写权限和运行期摘要。
-- Application Support 运行目录为 `0700`，未初始化的 `bootstrap-token` 为 `0600`
-  并在成功设置密码后删除。
-- Keychain 锁定、macOS 屏幕锁和磁盘加密仍属于必要的宿主机控制。
+- macOS Application Support 运行目录尽量设置为 `0700`、令牌文件为 `0600`；Windows 使用
+  当前用户目录的继承 ACL，并用 DPAPI 保护 `secrets/` 密文。未初始化的 `bootstrap-token`
+  在成功设置密码后删除。
+- Keychain/DPAPI 的用户会话保护、屏幕锁和磁盘加密仍属于必要的宿主机控制。
 
 ## 数据库账号建议
 
@@ -85,8 +86,8 @@ REST 客户端被强制杀死、网络栈没有及时向 Servlet 容器报告断
 - 为每个 AI 客户端签发独立、最小数据源范围、短有效期 Token，停止使用后立即吊销。
 - Token 泄露时吊销并重新签发；数据库凭据疑似泄露时在数据库端轮换，并在网页更新后
   重新做连接检查。
-- 不备份未加密的 `gateway.db` 或客户端 Token 配置。Keychain 与数据库备份策略由
-  macOS 管理员单独制定。
+- 不备份未加密的 `gateway.db`、`secrets/` 密文目录或客户端 Token 配置。Keychain、DPAPI
+  与数据库备份策略由对应操作系统管理员单独制定。
 
 ## 漏洞报告
 

@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.ObjectMapper;
@@ -60,6 +61,9 @@ class KeychainSecretStoreTest {
         // intentionally rejects every symlink component, so build the fixture
         // from the canonical temporary directory instead of weakening that check.
         Path realDirectory = directory.toRealPath();
+        Assumptions.assumeTrue(
+                Files.getFileStore(realDirectory).supportsFileAttributeView("posix"),
+                "Keychain helper fixture requires a POSIX file system");
         Path path = Files.createTempFile(realDirectory, "keychain-helper-", ".sh");
         Files.writeString(path, content);
         Files.setPosixFilePermissions(
