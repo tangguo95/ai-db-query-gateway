@@ -6,7 +6,7 @@
 
 [English](README.md)
 
-这是一个本地优先、带审计能力的数据库查询网关，用于让 AI 客户端受控查询 MySQL 和
+这是一个本地优先、带审计能力的数据库查询网关，用于让 AI 客户端受控查询 MySQL、DRDS 和
 OceanBase。管理员在网页中维护数据源，REST API 统一执行查询策略，本地 MCP STDIO
 适配器只向 Codex、Claude 或其他本地 AI 客户端暴露固定的查询工具。
 
@@ -17,7 +17,7 @@ OceanBase。管理员在网页中维护数据源，REST API 统一执行查询�
 
 ## 功能概览
 
-- 支持 MySQL、OceanBase MySQL 模式和 OceanBase Oracle 模式，并通过连接器 SPI 预留扩展点。
+- 支持 MySQL、DRDS（MySQL 兼容，Connector/J 5.1）、OceanBase MySQL 模式和 OceanBase Oracle 模式，并通过连接器 SPI 预留扩展点。
 - 数据库凭据和审计加密密钥保存在 macOS Keychain 或 Windows 当前用户 DPAPI 保护的本地密文文件；
   SQLite 保存元数据、作用域和审计链，不保存明文凭据。
 - 网页端管理数据源、审批、作用域令牌和审计轨迹。
@@ -50,7 +50,7 @@ AI 客户端 ── STDIO ── MCP ──令牌──> Spring Boot 网关
                                   ├─ SQL AST 策略和风险审批
                                   ├─ SQLite 控制面与链式 HMAC 审计
                                   ├─ macOS Keychain / Windows DPAPI 凭据引用
-                                  └─ 有界 JDBC 连接池 ──> MySQL / OceanBase
+                                  └─ 有界 JDBC 连接池 ──> MySQL / DRDS / OceanBase
 ```
 
 服务默认监听 `127.0.0.1:8765`，不是数据库 TCP 代理，也不提供远程 HTTP MCP。非回环监听

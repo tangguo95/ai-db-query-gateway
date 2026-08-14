@@ -1,4 +1,4 @@
-export type DatabaseType = 'MYSQL' | 'OCEANBASE_MYSQL' | 'OCEANBASE_ORACLE'
+export type DatabaseType = 'MYSQL' | 'DRDS_MYSQL' | 'OCEANBASE_MYSQL' | 'OCEANBASE_ORACLE'
 export type ReadOnlyStatus = 'STRICT' | 'COMPATIBILITY' | 'BLOCKED' | 'UNKNOWN'
 export type QueryStatus =
   | 'REQUESTED'

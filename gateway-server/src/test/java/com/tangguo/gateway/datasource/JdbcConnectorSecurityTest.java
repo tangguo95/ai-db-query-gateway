@@ -46,6 +46,32 @@ class JdbcConnectorSecurityTest {
     }
 
     @Test
+    void drdsUsesLegacyMysqlDriverAndLegacyTlsProperties() {
+        DrdsJdbcConnector connector = new DrdsJdbcConnector();
+        String url = connector.jdbcUrl(new ConnectionSecret(
+                "drds.example.com", 3306, "orders", "reader", "secret", Map.of("tlsMode", "REQUIRED")));
+
+        assertThat(connector.driverClassName()).isEqualTo("com.mysql.jdbc.Driver");
+        assertThat(connector.supports(com.tangguo.gateway.model.DatabaseType.DRDS_MYSQL)).isTrue();
+        assertThat(url)
+                .contains("useSSL=true")
+                .contains("requireSSL=true")
+                .contains("verifyServerCertificate=false")
+                .contains("allowMultiQueries=false")
+                .doesNotContain("sslMode=")
+                .doesNotContain("secret")
+                .doesNotContain("reader");
+    }
+
+    @Test
+    void drdsLegacyDriverMustNotResolveToConnectorJ84CompatibilityShim() throws Exception {
+        Class<?> driver = Class.forName(new DrdsJdbcConnector().driverClassName());
+
+        // Connector/J 8.4 也提供同名兼容类，但它继承 cj.jdbc.Driver，DRDS 会在握手阶段拒绝。
+        assertThat(driver.getSuperclass().getName()).isEqualTo("com.mysql.jdbc.NonRegisteringDriver");
+    }
+
+    @Test
     void mysqlGrantClassificationFailsClosedForRolesAndUnknownDynamicPrivileges() {
         MySqlJdbcConnector connector = new MySqlJdbcConnector();
 

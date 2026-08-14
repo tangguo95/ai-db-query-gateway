@@ -10,7 +10,7 @@ Windows 托盘 ── health / service control ─┘
                                       ├─ AST 策略与风险审批
                                       ├─ SQLite 控制面与 HMAC 审计链
                                       ├─ macOS Keychain / Windows DPAPI secretRef
-                                      └─ 有界 JDBC 池 ──> MySQL / OceanBase
+                                      └─ 有界 JDBC 池 ──> MySQL / DRDS / OceanBase
 ```
 
 Spring Boot 服务是唯一策略决定点和唯一数据库连接方。MCP 只是协议适配器，不包含 JDBC

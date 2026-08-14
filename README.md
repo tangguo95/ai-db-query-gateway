@@ -7,7 +7,7 @@
 [中文说明](README_ZH.md)
 
 AI DB Query Gateway is a local-first, audited query gateway for using AI clients with
-MySQL and OceanBase databases. A browser console stores data-source credentials locally,
+MySQL, DRDS, and OceanBase databases. A browser console stores data-source credentials locally,
 the REST API applies the query policy, and a small MCP STDIO adapter exposes only the
 approved read-query tools to Codex, Claude, or another local AI client.
 
@@ -18,7 +18,7 @@ database addresses and passwords into every AI conversation with one local secur
 
 ## What it does
 
-- Supports MySQL, OceanBase MySQL mode, and OceanBase Oracle mode through a connector SPI.
+- Supports MySQL, legacy DRDS MySQL compatibility mode (Connector/J 5.1), OceanBase MySQL mode, and OceanBase Oracle mode through a connector SPI.
 - Keeps database credentials and audit encryption keys in macOS Keychain or Windows current-user
   DPAPI-protected ciphertext files; SQLite stores metadata, scope information, and the audit chain
   rather than plaintext credentials.
@@ -57,7 +57,7 @@ AI client ── STDIO ── MCP ── token ──> Spring Boot gateway
                                       ├─ SQL AST policy and approval workflow
                                       ├─ SQLite control plane and chained HMAC audit
                                       ├─ macOS Keychain / Windows DPAPI secret references
-                                      └─ bounded JDBC pools ──> MySQL / OceanBase
+                                      └─ bounded JDBC pools ──> MySQL / DRDS / OceanBase
 ```
 
 The service listens on `127.0.0.1:8765` by default. It is not a database TCP proxy and it

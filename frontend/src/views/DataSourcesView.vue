@@ -362,6 +362,7 @@ async function deleteDataSource(source: DataSourceSummary) {
 function databaseLabel(type: DatabaseType): string {
   return {
     MYSQL: 'MySQL',
+    DRDS_MYSQL: 'DRDS · MySQL 兼容',
     OCEANBASE_MYSQL: 'OceanBase · MySQL',
     OCEANBASE_ORACLE: 'OceanBase · Oracle'
   }[type]
@@ -527,6 +528,7 @@ onMounted(load)
           <el-form-item label="数据库类型">
             <el-select v-model="form.databaseType" style="width: 100%">
               <el-option label="MySQL" value="MYSQL" />
+              <el-option label="DRDS · MySQL 兼容（5.1 驱动）" value="DRDS_MYSQL" />
               <el-option label="OceanBase · MySQL 模式" value="OCEANBASE_MYSQL" />
               <el-option label="OceanBase · Oracle 模式" value="OCEANBASE_ORACLE" />
             </el-select>
@@ -544,7 +546,7 @@ onMounted(load)
             <el-input
               v-model="form.username"
               autocomplete="off"
-              :placeholder="form.databaseType === 'MYSQL' ? '数据库账号' : '按 OceanBase 部署填写 user@tenant#cluster'"
+              :placeholder="form.databaseType === 'OCEANBASE_ORACLE' ? '按 OceanBase 部署填写 user@tenant#cluster' : '数据库账号'"
             />
           </el-form-item>
           <el-form-item label="密码">

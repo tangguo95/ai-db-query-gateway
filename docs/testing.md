@@ -102,6 +102,7 @@ Windows 托盘应用可单独构建和启动：
 在真实生产接入前，至少用一次性非生产账号逐项验证：
 
 - MySQL 8.4：验证真实连接、元数据、受控 SELECT 和只读事务。
+- DRDS MySQL：使用非生产 DRDS 端点验证 Connector/J 5.1.49、元数据、受控 SELECT 和只读事务。
 - OceanBase MySQL：验证 OceanBase CE 对应版本、官方/兼容驱动、元数据和只读事务。
 - OceanBase Oracle：验证一次性 Oracle 模式租户、元数据和 `SET TRANSACTION READ ONLY`；
   不要求账号能够访问权限视图。
