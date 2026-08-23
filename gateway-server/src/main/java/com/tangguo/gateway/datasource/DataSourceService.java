@@ -133,6 +133,7 @@ public class DataSourceService {
                 false,
                 request.allowCompatibility(),
                 request.queryTimeoutSeconds() == null ? 10 : request.queryTimeoutSeconds(),
+                5,
                 null,
                 null,
                 now,

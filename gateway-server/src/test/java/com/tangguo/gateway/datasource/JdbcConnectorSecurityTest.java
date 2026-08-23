@@ -72,6 +72,18 @@ class JdbcConnectorSecurityTest {
     }
 
     @Test
+    void jdbcTimeoutsKeepExistingDefaultsAndExpandSlowConnectionWindow() {
+        String url = "jdbc:mysql://db.example.com:3306/orders?connectTimeout=5000&socketTimeout=30000";
+
+        assertThat(JdbcTimeouts.apply(url, 5))
+                .contains("connectTimeout=5000")
+                .contains("socketTimeout=30000");
+        assertThat(JdbcTimeouts.apply(url, 45))
+                .contains("connectTimeout=45000")
+                .contains("socketTimeout=60000");
+    }
+
+    @Test
     void mysqlGrantClassificationFailsClosedForRolesAndUnknownDynamicPrivileges() {
         MySqlJdbcConnector connector = new MySqlJdbcConnector();
 

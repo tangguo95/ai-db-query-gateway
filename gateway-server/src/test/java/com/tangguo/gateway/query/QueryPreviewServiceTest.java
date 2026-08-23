@@ -183,6 +183,7 @@ class QueryPreviewServiceTest {
                 true,
                 false,
                 10,
+                5,
                 now,
                 "ok",
                 now,

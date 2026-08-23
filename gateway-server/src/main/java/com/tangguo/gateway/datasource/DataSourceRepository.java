@@ -40,9 +40,10 @@ public class DataSourceRepository {
                 INSERT INTO data_source_config(
                     id, name, database_type, secret_ref, credential_version,
                     read_only_status, enabled, deleted,
-                    allow_compatibility, query_timeout_seconds, last_tested_at, last_test_message,
+                    allow_compatibility, query_timeout_seconds, connection_timeout_seconds,
+                    last_tested_at, last_test_message,
                     created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 config.id(),
                 config.name(),
@@ -53,6 +54,7 @@ public class DataSourceRepository {
                 config.enabled() ? 1 : 0,
                 config.allowCompatibility() ? 1 : 0,
                 config.queryTimeoutSeconds(),
+                config.connectionTimeoutSeconds(),
                 instant(config.lastTestedAt()),
                 config.lastTestMessage(),
                 instant(config.createdAt()),
@@ -168,6 +170,7 @@ public class DataSourceRepository {
                 resultSet.getInt("enabled") == 1,
                 resultSet.getInt("allow_compatibility") == 1,
                 resultSet.getInt("query_timeout_seconds"),
+                resultSet.getInt("connection_timeout_seconds"),
                 instant(resultSet.getString("last_tested_at")),
                 resultSet.getString("last_test_message"),
                 Instant.parse(resultSet.getString("created_at")),

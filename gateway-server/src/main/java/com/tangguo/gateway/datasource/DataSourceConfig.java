@@ -14,6 +14,7 @@ public record DataSourceConfig(
         boolean enabled,
         boolean allowCompatibility,
         int queryTimeoutSeconds,
+        int connectionTimeoutSeconds,
         Instant lastTestedAt,
         String lastTestMessage,
         Instant createdAt,

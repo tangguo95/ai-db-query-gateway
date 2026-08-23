@@ -69,14 +69,16 @@ public class DataSourceConnectionManager {
         HikariConfig hikari = new HikariConfig();
         hikari.setPoolName("gateway-ds-" + config.id().substring(0, 8));
         hikari.setDriverClassName(connector.driverClassName());
-        hikari.setJdbcUrl(connector.jdbcUrl(secret));
+        hikari.setJdbcUrl(JdbcTimeouts.apply(
+                connector.jdbcUrl(secret), config.connectionTimeoutSeconds()));
         hikari.setUsername(secret.username());
         hikari.setPassword(secret.password());
         hikari.setMaximumPoolSize(2);
         hikari.setMinimumIdle(0);
         hikari.setAutoCommit(false);
         hikari.setReadOnly(true);
-        hikari.setConnectionTimeout(5_000);
+        hikari.setConnectionTimeout(
+                JdbcTimeouts.connectionTimeoutMillis(config.connectionTimeoutSeconds()));
         hikari.setValidationTimeout(3_000);
         hikari.setIdleTimeout(60_000);
         hikari.setMaxLifetime(300_000);

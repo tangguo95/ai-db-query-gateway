@@ -21,6 +21,7 @@ class DataSourceRepositoryCredentialRaceTest {
         JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
         executeMigration(jdbcTemplate, "/db/migration/V1__initial_schema.sql");
         executeMigration(jdbcTemplate, "/db/migration/V2__credential_version.sql");
+        executeMigration(jdbcTemplate, "/db/migration/V5__data_source_connection_timeout.sql");
         repository = new DataSourceRepository(jdbcTemplate);
         Instant now = Instant.parse("2026-07-30T09:00:00Z");
         repository.insert(new DataSourceConfig(
@@ -33,6 +34,7 @@ class DataSourceRepositoryCredentialRaceTest {
                 true,
                 false,
                 10,
+                5,
                 now,
                 "strict",
                 now,

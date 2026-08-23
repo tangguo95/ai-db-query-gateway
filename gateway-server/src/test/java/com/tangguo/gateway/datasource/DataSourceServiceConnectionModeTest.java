@@ -97,6 +97,7 @@ class DataSourceServiceConnectionModeTest {
                 enabled,
                 false,
                 10,
+                5,
                 now,
                 "state",
                 now,
