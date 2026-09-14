@@ -82,6 +82,8 @@ public class SqlPolicyService {
             "FLOOR",
             "FROM_UNIXTIME",
             "GREATEST",
+            // 用户明确允许的工作日分钟数业务函数；不扩大为任意自定义函数。
+            "GET_WORKDAY_MINUTES",
             "GROUP_CONCAT",
             "HEX",
             "HOUR",
@@ -131,6 +133,7 @@ public class SqlPolicyService {
             "SIN",
             "SQRT",
             "STDDEV",
+            "STR_TO_DATE",
             "SUBSTR",
             "SUBSTRING",
             "SUM",

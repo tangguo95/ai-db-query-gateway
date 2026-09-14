@@ -666,7 +666,7 @@ public class QueryService {
         HttpStatus httpStatus = status == QueryStatus.CANCELLED
                 ? HttpStatus.CONFLICT
                 : status == QueryStatus.TIMED_OUT ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY;
-        throw new GatewayException(httpStatus, code, "数据库查询未完成", cause);
+        throw new GatewayException(httpStatus, code, "数据库查询未完成，查询编号：" + query.id(), cause);
     }
 
     private void failBeforeExecution(StoredQuery query, String code) {

@@ -224,6 +224,35 @@ class HttpGatewayClientTest {
         return arguments;
     }
 
+    @Test
+    void forwardsSafeGatewayErrorsButNotRawUpstreamBodies() throws Exception {
+        AtomicReference<String> payload = new AtomicReference<>(
+                "{\"code\":\"DATABASE_QUERY_FAILED\",\"safeMessage\":\"表或视图不存在 [SQLState=42S02, 数据库错误码=1146]\",\"message\":\"password=secret\",\"stackTrace\":\"secret\"}");
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            byte[] body = payload.get().getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(502, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        var client = new HttpGatewayClient(new GatewayConfig(
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort()), "test-token"), objectMapper);
+        var detailed = assertThrows(GatewayCallException.class,
+                () -> client.call("list_data_sources", objectMapper.createObjectNode()));
+        assertEquals("DATABASE_QUERY_FAILED", detailed.code());
+        assertTrue(detailed.getMessage().contains("42S02"));
+        assertFalse(detailed.getMessage().contains("secret"));
+        for (String unsafe : List.of("<html>password=secret</html>",
+                "{\"code\":\"DATABASE_QUERY_FAILED\",\"message\":\"password=secret\"}", "null")) {
+            payload.set(unsafe);
+            var fallback = assertThrows(GatewayCallException.class,
+                    () -> client.call("list_data_sources", objectMapper.createObjectNode()));
+            assertEquals("GATEWAY_HTTP_502", fallback.code());
+            assertFalse(fallback.getMessage().contains("secret"));
+        }
+    }
+
     private void captureAndRespond(HttpExchange exchange, List<CapturedRequest> requests) throws IOException {
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
         requests.add(new CapturedRequest(

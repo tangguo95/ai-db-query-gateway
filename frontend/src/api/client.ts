@@ -33,6 +33,26 @@ export class ApiError extends Error {
   }
 }
 
+export async function exportDataSourceBackup(password: string, dataSourceIds: string[]): Promise<Blob> {
+  const response = await fetch('/api/datasources/backup/export', {
+    method: 'POST', credentials: 'include', cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', ...csrfHeader() },
+    body: JSON.stringify({ password, dataSourceIds })
+  })
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new CustomEvent('gateway:unauthorized'))
+    const body = await response.json().catch(() => ({}))
+    throw new ApiError(response.status, body.message || '导出备份失败', body.code)
+  }
+  return response.blob()
+}
+
+export function importDataSourceBackup(password: string, file: string) {
+  return request<{ items: { name: string; status: string; message: string }[] }>('/api/datasources/backup/import', {
+    method: 'POST', body: JSON.stringify({ password, file })
+  })
+}
+
 function readCookie(name: string): string | undefined {
   const prefix = `${encodeURIComponent(name)}=`
   return document.cookie
@@ -344,6 +364,8 @@ export const api = {
     eventType?: string
     status?: string
     queryId?: string
+    from?: string
+    to?: string
   }) => {
     const payload = await request<JsonRecord[] | ListResponse<JsonRecord> | { content: JsonRecord[]; totalElements: number }>(
       '/api/audits',
@@ -352,6 +374,18 @@ export const api = {
     )
     const page = normalizeList(payload)
     return { ...page, items: page.items.map(auditRecord) }
+  },
+
+  exportAudits: async (params: Record<string, QueryValue>) => {
+    const response = await fetch('/api/audits/export' + toQuery(params), {
+      credentials: 'include', cache: 'no-store'
+    })
+    if (!response.ok) {
+      if (response.status === 401) window.dispatchEvent(new CustomEvent('gateway:unauthorized'))
+      const body = await response.json().catch(() => ({}))
+      throw new ApiError(response.status, body.message || '导出失败，请稍后重试', body.code)
+    }
+    return response.blob()
   },
 
   tokens: () => request<AccessTokenSummary[] | ListResponse<AccessTokenSummary>>('/api/tokens'),

@@ -137,11 +137,7 @@ final class HttpGatewayClient implements GatewayClient {
                 throw new GatewayCallException("GATEWAY_RESPONSE_TOO_LARGE", "网关响应超过 MCP 适配器上限");
             }
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                // 不转发上游错误正文，避免其中意外包含 SQL、参数或其他敏感信息。
-                throw new GatewayCallException(
-                        "GATEWAY_HTTP_" + response.statusCode(),
-                        "数据库网关拒绝了请求（HTTP " + response.statusCode() + "）"
-                );
+                throw gatewayError(response.statusCode(), responseBytes);
             }
             if (responseBytes.length == 0) {
                 return objectMapper.createObjectNode();
@@ -164,6 +160,22 @@ final class HttpGatewayClient implements GatewayClient {
         } catch (RuntimeException exception) {
             throw new GatewayCallException("GATEWAY_CLIENT_ERROR", "数据库网关请求构造失败");
         }
+    }
+
+    private GatewayCallException gatewayError(int status, byte[] body) {
+        try {
+            JsonNode error = objectMapper.readTree(body);
+            String code = error.path("code").asText("");
+            String message = error.path("safeMessage").asText("");
+            // 仅转发网关专门生成的安全错误字段，不透传代理 HTML、堆栈或 JDBC 原文。
+            if (code.matches("[A-Z][A-Z0-9_]{0,95}") && !message.isBlank() && message.length() <= 2048) {
+                return new GatewayCallException(code, message + "（HTTP " + status + "）");
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // 老版本网关或非 JSON 代理错误继续返回 HTTP 兜底信息。
+        }
+        return new GatewayCallException("GATEWAY_HTTP_" + status,
+                "数据库网关请求失败（HTTP " + status + "），未收到可用的详细错误");
     }
 
     private static String requiredSegment(ObjectNode arguments, String fieldName) throws GatewayCallException {

@@ -168,13 +168,46 @@ public class AuditService {
 
     public AuditPage findPage(
             int page, int size, String eventType, String status, String queryId) {
-        int safeSize = Math.max(1, Math.min(size, 200));
+        return findPage(page, size, eventType, status, queryId, null, null);
+    }
+
+    public AuditPage findPage(
+            int page, int size, String eventType, String status, String queryId, Instant from, Instant to) {
+        return findRecords(page, size, eventType, status, queryId, from, to, 200);
+    }
+
+    public List<AuditView> exportRecords(
+            String eventType, String status, String queryId, Instant from, Instant to) {
+        var result = findRecords(0, 50_001, eventType, status, queryId, from, to, 50_001);
+        if (result.total() > 50_000) {
+            throw new GatewayException(HttpStatus.BAD_REQUEST, "AUDIT_EXPORT_TOO_LARGE",
+                    "导出最多支持 50000 条记录，请缩小时间或事件范围");
+        }
+        return result.items();
+    }
+
+    private AuditPage findRecords(
+            int page, int size, String eventType, String status, String queryId,
+            Instant from, Instant to, int maxSize) {
+        if (from != null && to != null && !from.isBefore(to)) {
+            throw new GatewayException(HttpStatus.BAD_REQUEST, "INVALID_AUDIT_FILTER", "开始时间必须早于结束时间");
+        }
+        int safeSize = Math.max(1, Math.min(size, maxSize));
         int safePage = Math.max(0, page);
         String normalizedEventType = optionalFilter(eventType, 64, "eventType");
         String normalizedStatus = optionalFilter(status, 32, "status");
         String normalizedQueryId = optionalQueryId(queryId);
         List<String> predicates = new ArrayList<>();
         List<Object> arguments = new ArrayList<>();
+        // 使用时间值比较，兼容历史 ISO 时间的小数秒精度；结束时间为开区间。
+        if (from != null) {
+            predicates.add("julianday(a.occurred_at) >= julianday(?)");
+            arguments.add(from.toString());
+        }
+        if (to != null) {
+            predicates.add("julianday(a.occurred_at) < julianday(?)");
+            arguments.add(to.toString());
+        }
         if (normalizedEventType != null) {
             if ("APPROVAL".equals(normalizedEventType)) {
                 predicates.add("a.event_type IN (?, ?, ?, ?)");

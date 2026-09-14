@@ -19,7 +19,9 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(GatewayException.class)
     ResponseEntity<Map<String, Object>> handleGateway(GatewayException exception) {
-        return response(exception.status(), exception.code(), exception.getMessage());
+        String reason = DatabaseErrorMessage.describe(exception.getCause());
+        return response(exception.status(), exception.code(),
+                exception.getMessage() + (reason.isEmpty() ? "" : "；" + reason));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -33,7 +35,8 @@ public class ApiExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", message);
     }
 
-    @ExceptionHandler({ConstraintViolationException.class, HttpMessageNotReadableException.class})
+    @ExceptionHandler({ConstraintViolationException.class, HttpMessageNotReadableException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
     ResponseEntity<Map<String, Object>> handleBadRequest(Exception exception) {
         return response(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "请求参数格式无效");
     }
@@ -59,6 +62,7 @@ public class ApiExceptionHandler {
         body.put("status", status.value());
         body.put("code", code);
         body.put("message", message);
+        body.put("safeMessage", message);
         return ResponseEntity.status(status).body(body);
     }
 }

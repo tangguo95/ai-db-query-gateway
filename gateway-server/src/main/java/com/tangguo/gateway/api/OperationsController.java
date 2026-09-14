@@ -52,10 +52,16 @@ public class OperationsController {
             @RequestParam(defaultValue = "50") int size,
             @RequestParam(required = false) String eventType,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String queryId) {
+            @RequestParam(required = false) String queryId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
+        Instant end = to == null ? Instant.now() : to;
+        Instant start = from == null ? end.atZone(java.time.ZoneId.systemDefault()).minusMonths(1).toInstant() : from;
         Map<String, Object> filters = new LinkedHashMap<>();
         filters.put("page", page);
         filters.put("size", size);
+        filters.put("from", start.toString());
+        filters.put("to", end.toString());
         if (eventType != null && !eventType.isBlank()) {
             filters.put("eventType", eventType);
         }
@@ -71,7 +77,32 @@ public class OperationsController {
                 "AUDIT_VIEWED",
                 "SUCCESS",
                 filters));
-        return auditService.findPage(page, size, eventType, status, queryId);
+        return auditService.findPage(page, size, eventType, status, queryId, start, end);
+    }
+
+    @GetMapping("/audits/export")
+    org.springframework.http.ResponseEntity<byte[]> exportAudits(
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String queryId,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) throws java.io.IOException {
+        Instant end = to == null ? Instant.now() : to;
+        Instant start = from == null ? end.atZone(java.time.ZoneId.systemDefault()).minusMonths(1).toInstant() : from;
+        var items = auditService.exportRecords(eventType, status, queryId, start, end);
+        byte[] workbook = com.tangguo.gateway.audit.AuditExcel.write(items);
+        auditService.record(AuditCommand.simple(actorContext.actor(), ActorType.ADMIN,
+                "AUDIT_EXPORTED", "SUCCESS", Map.of(
+                        "from", start.toString(), "to", end.toString(), "rowCount", items.size(),
+                        "eventType", eventType == null ? "" : eventType,
+                        "status", status == null ? "" : status,
+                        "queryId", queryId == null ? "" : queryId)));
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=audit-records.xlsx")
+                .header("Cache-Control", "no-store")
+                .contentType(org.springframework.http.MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(workbook);
     }
 
     @GetMapping("/dashboard")

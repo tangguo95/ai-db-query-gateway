@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { api, errorMessage, normalizeList } from '../api/client'
 import type { AuditRecord, QueryResponse } from '../api/types'
 import LoadState from '../components/LoadState.vue'
@@ -16,18 +17,37 @@ const expandedId = ref<string | number | null>(null)
 const queryDetails = ref<Record<string, QueryResponse | null>>({})
 const queryDetailErrors = ref<Record<string, string>>({})
 const queryDetailLoading = ref<string | null>(null)
+const exporting = ref(false)
+function recentMonth(): [Date, Date] {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(1)
+  start.setMonth(start.getMonth() - 1)
+  const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate()
+  start.setDate(Math.min(end.getDate(), lastDay))
+  start.setHours(0, 0, 0, 0)
+  return [start, end]
+}
 const filters = reactive({
   eventType: 'APPROVAL',
   status: '',
-  queryId: ''
+  queryId: '',
+  dateRange: recentMonth()
 })
 
 const eventLabels: Record<string, string> = {
   AUDIT_VIEWED: '查看审计记录',
+  AUDIT_EXPORTED: '导出审计记录',
   ADMIN_PASSWORD_CHANGED: '修改管理员密码',
   ADMIN_PASSWORD_CHANGE_FAILED: '修改管理员密码失败',
   ADMIN_PROFILE_UPDATED: '更新用户信息',
   DATASOURCE_CREATED: '新增数据源',
+  DATASOURCE_BACKUP_REQUESTED: '申请导出数据源备份',
+  DATASOURCE_BACKUP_EXPORTED: '导出加密数据源备份',
+  DATASOURCE_BACKUP_FAILED: '导出数据源备份失败',
+  DATASOURCE_IMPORT_REQUESTED: '申请导入数据源备份',
+  DATASOURCE_IMPORT_COMPLETED: '数据源备份导入完成',
+  DATASOURCE_IMPORT_FAILED: '数据源备份验证失败',
   DATASOURCE_CREATE_REQUESTED: '申请新增数据源',
   DATASOURCE_CREDENTIAL_CHANGED: '更新数据源凭据',
   DATASOURCE_DELETED: '删除数据源',
@@ -108,6 +128,40 @@ const errorLabels: Record<string, string> = {
   QUERY_SCOPE_DENIED: '令牌没有数据源权限'
 }
 
+function requestFilters() {
+  const [from, lastDay] = filters.dateRange
+  const to = new Date(lastDay)
+  to.setHours(0, 0, 0, 0)
+  to.setDate(to.getDate() + 1)
+  return {
+    eventType: filters.eventType || undefined,
+    status: filters.status || undefined,
+    queryId: filters.queryId.trim() || undefined,
+    from: from.toISOString(),
+    to: to.toISOString()
+  }
+}
+
+async function exportExcel() {
+  exporting.value = true
+  try {
+    const blob = await api.exportAudits(requestFilters())
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = '查询审计记录.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    ElMessage.success('审计记录已导出')
+  } catch (cause) {
+    ElMessage.error(errorMessage(cause))
+  } finally {
+    exporting.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -115,9 +169,7 @@ async function load() {
     const response = normalizeList(await api.audits({
       page: page.value - 1,
       size: pageSize.value,
-      eventType: filters.eventType || undefined,
-      status: filters.status || undefined,
-      queryId: filters.queryId.trim() || undefined
+      ...requestFilters()
     }))
     records.value = response.items
     total.value = response.total
@@ -138,6 +190,7 @@ function resetFilters() {
   filters.eventType = 'APPROVAL'
   filters.status = ''
   filters.queryId = ''
+  filters.dateRange = recentMonth()
   page.value = 1
   expandedId.value = null
   void load()
@@ -237,13 +290,19 @@ onMounted(load)
       <div>
         <p class="eyebrow">查询审计 / 审批记录</p>
         <h1 class="page-title">查询审计记录</h1>
-        <p class="page-subtitle">默认只显示查询审批事件。展开记录可查看查询申请和近期结果；结果不写入磁盘，过期后只能看到执行元数据。</p>
+        <p class="page-subtitle">默认显示最近一个月的审批记录，可按时间筛选并导出 Excel 分析。展开记录可查看查询申请和近期缓存结果。</p>
       </div>
       <div class="retention-label"><span>∞</span> 审计链持续校验</div>
     </header>
 
     <section class="panel filter-panel">
       <div class="filters">
+        <div class="date-filter">
+          <label>发生时间</label>
+          <el-date-picker v-model="filters.dateRange" type="daterange"
+            :clearable="false" format="YYYY-MM-DD" range-separator="至"
+            start-placeholder="开始日期" end-placeholder="结束日期" style="width: 100%" />
+        </div>
         <div>
           <label>查看范围</label>
           <el-select v-model="filters.eventType" clearable placeholder="全部事件">
@@ -281,7 +340,8 @@ onMounted(load)
         </div>
         <el-button type="primary" @click="applyFilters">筛选记录</el-button>
         <el-button plain @click="resetFilters">恢复默认</el-button>
-        <span class="local-time-note">时间显示为本机时间</span>
+        <el-button plain :loading="exporting" @click="exportExcel">导出 Excel</el-button>
+        <span class="local-time-note">按当前条件导出全部匹配记录，最多 50000 条</span>
       </div>
     </section>
 
@@ -447,6 +507,7 @@ onMounted(load)
 
 .filters {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 10px;
   padding: 15px;
@@ -458,6 +519,11 @@ onMounted(load)
 
 .filters > .query-id-filter {
   width: min(310px, 30vw);
+}
+
+.filters > .date-filter {
+  width: 340px;
+  max-width: 100%;
 }
 
 .filters label {
@@ -710,6 +776,7 @@ onMounted(load)
   }
 
   .filters > div,
+  .filters > .date-filter,
   .filters > .query-id-filter {
     width: auto;
   }

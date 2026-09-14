@@ -76,6 +76,23 @@ class SqlPolicyServiceTest {
     }
 
     @Test
+    void allowsRequestedDateFunctionsWithoutAllowingOtherFunctionsOrWrites() {
+        for (DatabaseType type : new DatabaseType[] {
+                DatabaseType.MYSQL, DatabaseType.DRDS_MYSQL, DatabaseType.OCEANBASE_MYSQL}) {
+            var analysis = policy.analyze(type,
+                    "SELECT DATE_FORMAT(STR_TO_DATE(?, '%Y-%m-%d'), '%Y-%m'), "
+                            + "get_workday_minutes(?, ?) FROM orders WHERE id = ?", 100);
+            assertThat(analysis.parameterCount()).isEqualTo(4);
+        }
+        assertRejected("SELECT get_workday_minutes(SLEEP(5), ?) FROM orders",
+                "UNKNOWN_FUNCTION_FORBIDDEN");
+        assertRejected("SELECT get_workday_minutes_other(?, ?) FROM orders",
+                "UNKNOWN_FUNCTION_FORBIDDEN");
+        assertRejected("UPDATE orders SET minutes = get_workday_minutes(?, ?)",
+                "ONLY_SINGLE_SELECT_ALLOWED");
+    }
+
+    @Test
     void rejectsRecursiveOrMutatingCte() {
         assertRejected(
                 "WITH RECURSIVE n AS (SELECT 1 UNION ALL SELECT 1 FROM n) SELECT * FROM n",

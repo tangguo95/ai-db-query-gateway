@@ -97,6 +97,10 @@ public class DataSourceService {
     }
 
     public DataSourceView create(DataSourceCreateRequest request, String actor) {
+        return createFromBackup(request, actor, 5, true);
+    }
+
+    DataSourceView createFromBackup(DataSourceCreateRequest request, String actor, int connectionTimeout, boolean resolveHost) {
         String id = UUID.randomUUID().toString();
         auditService.record(new AuditCommand(
                 actor,
@@ -112,7 +116,7 @@ public class DataSourceService {
                 null,
                 null,
                 null));
-        validateEndpoint(request.host(), request.port(), request.properties());
+        validateEndpoint(request.host(), request.port(), request.properties(), resolveHost);
         String secretRef = "gateway.datasource." + UUID.randomUUID();
         ConnectionSecret secret = new ConnectionSecret(
                 request.host().trim(),
@@ -133,7 +137,7 @@ public class DataSourceService {
                 false,
                 request.allowCompatibility(),
                 request.queryTimeoutSeconds() == null ? 10 : request.queryTimeoutSeconds(),
-                5,
+                connectionTimeout,
                 null,
                 null,
                 now,
@@ -653,6 +657,10 @@ public class DataSourceService {
     }
 
     private void validateEndpoint(String host, int port, Map<String, String> customProperties) {
+        validateEndpoint(host, port, customProperties, true);
+    }
+
+    void validateEndpoint(String host, int port, Map<String, String> customProperties, boolean resolveHost) {
         if (host == null
                 || host.isBlank()
                 || host.length() > 255
@@ -679,6 +687,8 @@ public class DataSourceService {
                 }
             }
         }
+        // 离线恢复仅延迟域名解析；数字地址仍执行原有危险地址检查。
+        if (!resolveHost && !host.matches("[0-9.]+") && !host.contains(":")) return;
         try {
             for (InetAddress address : InetAddress.getAllByName(host)) {
                 if (address.isAnyLocalAddress() || address.isMulticastAddress() || address.isLinkLocalAddress()) {

@@ -11,6 +11,9 @@ import type {
 } from '../api/types'
 import LoadState from '../components/LoadState.vue'
 import StateChip from '../components/StateChip.vue'
+import DataSourceBackupDialog from '../components/DataSourceBackupDialog.vue'
+
+const backupMode = ref<'export' | 'import' | null>(null)
 
 const loading = ref(true)
 const error = ref('')
@@ -385,8 +388,17 @@ onMounted(load)
         <h1 class="page-title">数据源</h1>
         <p class="page-subtitle">管理数据库连接，查看连接状态并执行连接复检。凭据由本机服务安全保存，网页不会显示。</p>
       </div>
-      <el-button type="primary" @click="openCreate">接入数据源</el-button>
+      <div class="backup-actions">
+        <el-button @click="backupMode = 'import'">导入备份</el-button>
+        <el-button :disabled="loading || !dataSources.length" @click="backupMode = 'export'">
+          {{ selectedIds.length ? '导出已选备份' : '导出全部备份' }}
+        </el-button>
+        <el-button type="primary" @click="openCreate">接入数据源</el-button>
+      </div>
     </header>
+    <DataSourceBackupDialog v-if="backupMode" :mode="backupMode"
+      :ids="selectedIds.length ? [...selectedIds] : dataSources.map(s => s.id)"
+      @close="backupMode = null" @imported="load" />
 
     <div class="status-bar">
       <span>已接入 <strong>{{ dataSources.length }}</strong></span>
@@ -680,6 +692,8 @@ onMounted(load)
 </template>
 
 <style scoped>
+.backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.backup-actions .el-button { margin-left: 0; }
 .status-bar {
   display: flex;
   gap: 24px;

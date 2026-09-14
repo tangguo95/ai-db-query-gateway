@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import '@fontsource-variable/noto-sans-sc'
 import '@fontsource-variable/jetbrains-mono'
 import 'element-plus/dist/index.css'
@@ -15,5 +16,5 @@ const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus, { size: 'default' })
+app.use(ElementPlus, { size: 'default', locale: zhCn })
 app.mount('#app')

@@ -138,4 +138,48 @@ class AuditServiceTest {
         assertThatThrownBy(() -> auditService.findPage(0, 50, null, null, "not-a-uuid"))
                 .isInstanceOf(GatewayException.class);
     }
+
+    @Test
+    void dateRangeUsesInclusiveStartExclusiveEndAndSameExportFilter() {
+        for (int i = 0; i < 3; i++) {
+            auditService.record(AuditCommand.simple(
+                    "admin", ActorType.ADMIN, "QUERY_APPROVED", "APPROVED", Map.of()));
+        }
+        // 仅修改测试数据的时间，用来覆盖不同 ISO 小数秒格式和时间边界。
+        jdbcTemplate.update("UPDATE audit_event SET occurred_at = '2026-08-01T00:00:00Z' WHERE sequence_no=1");
+        jdbcTemplate.update("UPDATE audit_event SET occurred_at = '2026-08-31T23:59:59.999Z' WHERE sequence_no=2");
+        jdbcTemplate.update("UPDATE audit_event SET occurred_at = '2026-09-01T00:00:00Z' WHERE sequence_no=3");
+        var from = java.time.Instant.parse("2026-08-01T00:00:00Z");
+        var to = java.time.Instant.parse("2026-09-01T00:00:00Z");
+        var page = auditService.findPage(0, 1, "APPROVAL", "APPROVED", null, from, to);
+        assertThat(page.total()).isEqualTo(2);
+        assertThat(page.items()).hasSize(1);
+        assertThat(auditService.exportRecords("APPROVAL", "APPROVED", null, from, to))
+                .extracting(item -> item.sequenceNo()).containsExactly(2L, 1L);
+        assertThatThrownBy(() -> auditService.findPage(0, 25, null, null, null, to, from))
+                .isInstanceOf(GatewayException.class);
+    }
+
+    @Test
+    void excelIsValidXmlAndTreatsUserTextAsText() throws Exception {
+        auditService.record(new AuditCommand("admin", ActorType.ADMIN, "QUERY_APPROVED", null, null,
+                "=1+1 <核对>&", null, Map.of(), "APPROVED", 12L, 3, 40L, null));
+        byte[] workbook = AuditExcel.write(auditService.findPage(0, 25, null, null, null).items());
+        int entries = 0;
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(workbook))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                byte[] xml = zip.readAllBytes();
+                javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                        .parse(new java.io.ByteArrayInputStream(xml));
+                if (entry.getName().equals("xl/worksheets/sheet1.xml")) {
+                    String sheet = new String(xml, StandardCharsets.UTF_8);
+                    assertThat(sheet).contains("=1+1 &lt;核对&gt;&amp;", "审批通过", "<v>12</v>")
+                            .doesNotContain("<f>");
+                }
+                entries++;
+            }
+        }
+        assertThat(entries).isEqualTo(5);
+    }
 }

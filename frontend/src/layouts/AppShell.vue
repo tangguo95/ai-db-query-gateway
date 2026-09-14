@@ -5,13 +5,12 @@ import { api, errorMessage } from '../api/client'
 import type { AdminProfile } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 import NavIcon from '../components/NavIcon.vue'
-import { useTheme } from '../theme'
+import ThemeSelect from '../components/ThemeSelect.vue'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const { theme, toggleTheme } = useTheme()
 const clock = ref(new Date())
 const mobileOpen = ref(false)
 const pendingApprovalCount = ref<number | null>(null)
@@ -334,16 +333,7 @@ watch(() => route.path, (path) => {
             <span>条待审批查询</span>
             <small>立即处理 →</small>
           </RouterLink>
-          <button
-            class="theme-toggle"
-            type="button"
-            :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
-            :title="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
-            @click="toggleTheme"
-          >
-            <NavIcon :name="theme === 'dark' ? 'sun' : 'moon'" />
-            <span>{{ theme === 'dark' ? '浅色' : '深色' }}</span>
-          </button>
+          <ThemeSelect />
           <div class="telemetry">
             <span class="service-pill"><i class="live-dot" />服务在线</span>
             <time>{{ timeText }}</time>

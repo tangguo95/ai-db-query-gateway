@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import NavIcon from '../components/NavIcon.vue'
-import { useTheme } from '../theme'
+import ThemeSelect from '../components/ThemeSelect.vue'
 
 defineProps<{
   step: string
@@ -8,7 +7,6 @@ defineProps<{
   subtitle: string
 }>()
 
-const { theme, toggleTheme } = useTheme()
 </script>
 
 <template>
@@ -32,16 +30,7 @@ const { theme, toggleTheme } = useTheme()
         <span><i />本机回环安全通道</span>
         <div class="console-top-actions">
           <span>{{ step }}</span>
-          <button
-            class="auth-theme-toggle"
-            type="button"
-            :aria-label="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
-            :title="theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'"
-            @click="toggleTheme"
-          >
-            <NavIcon :name="theme === 'dark' ? 'sun' : 'moon'" />
-            <span>{{ theme === 'dark' ? '浅色' : '深色' }}</span>
-          </button>
+          <ThemeSelect />
         </div>
       </div>
       <div class="auth-card">
