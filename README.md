@@ -30,8 +30,11 @@ database addresses and passwords into every AI conversation with one local secur
   management, or audit management to AI clients.
 - Applies an AST-based SQL policy before opening a business-database connection. Only one
   `SELECT`, `UNION`, or non-recursive CTE whose final statement is a query is accepted.
-- Rejects writes, DDL, transaction/session control, comments and hints, multi-statements,
+- Rejects writes, DDL, transaction/session control, ordinary comments and unapproved hints, multi-statements,
   locks, file operations, database links, recursive CTEs, and unsupported functions.
+- Security settings list the default functions and manage additional functions per data source.
+  Argument-free MATERIALIZE, INLINE, MERGE, and NO_MERGE hints can be enabled per database type.
+  Hints are disabled by default; changes persist immediately and are audited.
 - Enforces bounded rows, response bytes, field bytes, timeouts, concurrency, rate limits,
   one-time approvals, cancellation, and rollback.
 - Never writes query results to SQLite, audit records, ordinary logs, CSV files, or Excel files.

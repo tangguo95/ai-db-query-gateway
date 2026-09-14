@@ -7,6 +7,7 @@ import type { CurrentUser, DataSourceRecoveryPolicy, Dashboard, QueryApprovalPol
 import { useAuthStore } from '../stores/auth'
 import LoadState from '../components/LoadState.vue'
 import StateChip from '../components/StateChip.vue'
+import SqlAllowlistPanel from '../components/SqlAllowlistPanel.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -161,6 +162,7 @@ onMounted(load)
     </header>
 
     <LoadState :loading="loading" :error="error" @retry="load">
+      <SqlAllowlistPanel />
       <div class="security-grid">
         <section class="panel posture-panel">
           <header class="panel-header">

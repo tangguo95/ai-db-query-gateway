@@ -36,6 +36,8 @@ const filters = reactive({
 })
 
 const eventLabels: Record<string, string> = {
+  SQL_FUNCTION_ALLOWLIST_UPDATED: '修改函数白名单',
+  SQL_HINT_ALLOWLIST_UPDATED: '修改 Hint 白名单',
   AUDIT_VIEWED: '查看审计记录',
   AUDIT_EXPORTED: '导出审计记录',
   ADMIN_PASSWORD_CHANGED: '修改管理员密码',
@@ -313,6 +315,7 @@ onMounted(load)
             <el-option label="访问令牌" value="TOKEN" />
             <el-option label="登录认证" value="LOGIN" />
             <el-option label="用户设置" value="ADMIN" />
+            <el-option label="SQL 白名单设置" value="SQL_" />
           </el-select>
         </div>
         <div>

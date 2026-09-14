@@ -160,7 +160,7 @@ public class QueryService {
             }
             dataSource = dataSourceService.requireEnabled(request.dataSourceId());
             validateParameters(parameters);
-            analysis = sqlPolicy.analyze(dataSource.databaseType(), request.sql(), requestedMaxRows);
+            analysis = sqlPolicy.analyze(dataSource.databaseType(), request.sql(), requestedMaxRows, dataSource.id());
             if (analysis.parameterCount() != parameters.size()) {
                 throw new GatewayException(
                         HttpStatus.BAD_REQUEST, "PARAMETER_COUNT_MISMATCH", "SQL 占位符数量与参数数量不一致");
@@ -266,7 +266,7 @@ public class QueryService {
 
         SqlAnalysis analysis;
         try {
-            analysis = sqlPolicy.analyze(dataSource.databaseType(), request.sql(), requestedMaxRows);
+            analysis = sqlPolicy.analyze(dataSource.databaseType(), request.sql(), requestedMaxRows, dataSource.id());
             if (analysis.parameterCount() != parameters.size()) {
                 throw new GatewayException(
                         HttpStatus.BAD_REQUEST, "PARAMETER_COUNT_MISMATCH", "SQL 占位符数量与参数数量不一致");
@@ -467,6 +467,9 @@ public class QueryService {
                     null,
                     null));
             String sql = crypto.decrypt(query.sqlCipher());
+            var currentSource = dataSourceService.requireEnabled(query.dataSourceId());
+            // 审批后执行也读取最新规则，移除白名单项后旧审批不能继续放行。
+            sqlPolicy.analyze(currentSource.databaseType(), sql, query.effectiveMaxRows(), currentSource.id());
             List<QueryParameter> parameters = readParameters(crypto.decrypt(query.parametersCipher()));
             QueryResult result = executeJdbc(query, sql, parameters);
             return view(queryRepository.require(query.id()), result);

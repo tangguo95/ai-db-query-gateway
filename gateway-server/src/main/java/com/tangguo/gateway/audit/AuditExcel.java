@@ -15,6 +15,8 @@ import java.util.zip.ZipOutputStream;
 public final class AuditExcel {
     private AuditExcel() {}
     private static final Map<String, String> EVENTS = Map.ofEntries(
+            Map.entry("SQL_FUNCTION_ALLOWLIST_UPDATED", "修改函数白名单"),
+            Map.entry("SQL_HINT_ALLOWLIST_UPDATED", "修改 Hint 白名单"),
             Map.entry("DATASOURCE_BACKUP_REQUESTED", "申请导出数据源备份"),
             Map.entry("DATASOURCE_BACKUP_EXPORTED", "导出加密数据源备份"),
             Map.entry("DATASOURCE_BACKUP_FAILED", "导出数据源备份失败"),

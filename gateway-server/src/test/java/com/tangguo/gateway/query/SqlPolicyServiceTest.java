@@ -116,4 +116,43 @@ class SqlPolicyServiceTest {
                 .isInstanceOfSatisfying(
                         GatewayException.class, exception -> assertThat(exception.code()).isEqualTo(code));
     }
+
+    @Test
+    void managedAllowlistIsScopedAndStillRejectsHintEscapes() {
+        var settings = mock(com.tangguo.gateway.security.SettingService.class);
+        var sources = mock(com.tangguo.gateway.datasource.DataSourceRepository.class);
+        var values = new java.util.HashMap<String, String>();
+        when(settings.get(org.mockito.ArgumentMatchers.anyString())).thenAnswer(invocation ->
+                java.util.Optional.ofNullable(values.get(invocation.getArgument(0))));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            values.put(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).when(settings).put(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+        var rules = new SqlAllowlistService(settings, sources);
+        policy.setAllowlist(rules);
+        rules.saveFunctions("source-a", java.util.List.of("business_minutes"));
+        assertThat(policy.analyze(DatabaseType.MYSQL,
+                "SELECT business_minutes(?) FROM orders WHERE id = ?", 100, "source-a").parameterCount())
+                .isEqualTo(2);
+        assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL,
+                "SELECT business_minutes(?) FROM orders", 100, "source-b")).isInstanceOf(GatewayException.class);
+        rules.saveHints(DatabaseType.OCEANBASE_ORACLE, java.util.List.of("MATERIALIZE"));
+        String sql = "WITH t AS (SELECT /*+ materialize */ id FROM orders WHERE id = ?) SELECT id FROM t";
+        assertThat(policy.analyze(DatabaseType.OCEANBASE_ORACLE, sql, 100, "source-a").parameterCount()).isEqualTo(1);
+        assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL, sql, 100)).isInstanceOf(GatewayException.class);
+        for (String unsafe : java.util.List.of(
+                "SELECT /*+ MATERIALIZE SET_VAR(max_execution_time=0) */ id FROM orders",
+                "SELECT /*+ MATERIALIZE */ id FROM orders; DELETE FROM orders",
+                "SELECT /*+ MATERIALIZE */ id FROM orders /* comment */",
+                "SELECT /*+ MATERIALIZE */ id FROM orders FOR UPDATE",
+                "SELECT /*+ MATERIALIZE(DELETE FROM orders) */ id FROM orders")) {
+            assertThatThrownBy(() -> policy.analyze(DatabaseType.OCEANBASE_ORACLE, unsafe, 100))
+                    .isInstanceOf(GatewayException.class);
+        }
+        rules.saveFunctions("source-a", java.util.List.of());
+        assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL,
+                "SELECT business_minutes(?) FROM orders", 100, "source-a")).isInstanceOf(GatewayException.class);
+        assertThatThrownBy(() -> rules.saveFunctions("source-a", java.util.List.of("LOAD_FILE")))
+                .isInstanceOf(GatewayException.class);
+    }
 }

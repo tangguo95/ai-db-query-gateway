@@ -79,7 +79,7 @@ class QueryPreviewServiceTest {
                 500,
                 "0b06b0a7-f58e-4fcb-8730-10d2940259aa");
         when(dataSourceService.requireEnabled("ds-1")).thenReturn(dataSource());
-        when(sqlPolicy.analyze(DatabaseType.MYSQL, sql, 500))
+        when(sqlPolicy.analyze(DatabaseType.MYSQL, sql, 500, "ds-1"))
                 .thenReturn(new SqlAnalysis(
                         "fingerprint",
                         Set.of("sales"),
@@ -125,7 +125,7 @@ class QueryPreviewServiceTest {
                 200,
                 null);
         when(dataSourceService.requireEnabled("ds-1")).thenReturn(dataSource());
-        when(sqlPolicy.analyze(DatabaseType.MYSQL, sql, 200))
+        when(sqlPolicy.analyze(DatabaseType.MYSQL, sql, 200, "ds-1"))
                 .thenReturn(new SqlAnalysis(
                         "fingerprint", Set.of("sales"), Set.of("sales.orders"), List.of(), 2));
 
@@ -162,7 +162,7 @@ class QueryPreviewServiceTest {
                         GatewayException.class,
                         exception -> assertThat(exception.code()).isEqualTo("UNSUPPORTED_PARAMETER_TYPE"));
 
-        verify(sqlPolicy, never()).analyze(DatabaseType.MYSQL, request.sql(), 200);
+        verify(sqlPolicy, never()).analyze(DatabaseType.MYSQL, request.sql(), 200, "ds-1");
         verifyNoInteractions(connections, connectors, queryRepository);
         ArgumentCaptor<AuditCommand> auditCaptor = ArgumentCaptor.forClass(AuditCommand.class);
         verify(auditService, org.mockito.Mockito.times(2)).record(auditCaptor.capture());

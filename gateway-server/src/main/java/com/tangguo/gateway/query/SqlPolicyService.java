@@ -154,6 +154,16 @@ public class SqlPolicyService {
 
     private final GatewayProperties properties;
     private final DataSourceService dataSourceService;
+    private SqlAllowlistService allowlist;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAllowlist(SqlAllowlistService allowlist) {
+        this.allowlist = allowlist;
+    }
+
+    public static List<String> builtInFunctions() {
+        return ALLOWED_FUNCTIONS.stream().sorted().toList();
+    }
 
     public SqlPolicyService(GatewayProperties properties, DataSourceService dataSourceService) {
         this.properties = properties;
@@ -164,13 +174,18 @@ public class SqlPolicyService {
      * AST 是查询准入的权威判断；词法预检只负责在解析前禁止注释和多语句分隔符。
      */
     public SqlAnalysis analyze(DatabaseType databaseType, String sql, int requestedMaxRows) {
+        return analyze(databaseType, sql, requestedMaxRows, null);
+    }
+
+    public SqlAnalysis analyze(DatabaseType databaseType, String sql, int requestedMaxRows, String sourceId) {
         if (sql == null || sql.isBlank()) {
             reject("EMPTY_SQL", "SQL 不能为空");
         }
         if (sql.getBytes(StandardCharsets.UTF_8).length > properties.getQuery().getMaxSqlBytes()) {
             reject("SQL_TOO_LARGE", "SQL 超过 32 KiB 安全限制");
         }
-        rejectCommentsAndDelimiters(sql);
+        Set<String> hints = allowlist == null ? Set.of() : allowlist.hints(databaseType);
+        rejectCommentsAndDelimiters(sql, hints);
         DbType dialect =
                 databaseType == DatabaseType.OCEANBASE_ORACLE ? DbType.oracle : DbType.mysql;
         List<SQLStatement> statements;
@@ -216,11 +231,8 @@ public class SqlPolicyService {
                 }
             }
         }
-        if (!select.getHints().isEmpty()) {
-            reject("SQL_HINT_FORBIDDEN", "禁止优化器 Hint");
-        }
-
         InspectionState inspection = new InspectionState(with);
+        inspection.customFunctions = allowlist == null ? Set.of() : allowlist.functions(sourceId);
         SQLASTVisitor visitor = databaseType == DatabaseType.OCEANBASE_ORACLE
                 ? new OracleInspectionVisitor(inspection)
                 : new MySqlInspectionVisitor(inspection);
@@ -285,7 +297,7 @@ public class SqlPolicyService {
                 inspection.parameterCount);
     }
 
-    private void rejectCommentsAndDelimiters(String sql) {
+    private void rejectCommentsAndDelimiters(String sql, Set<String> hints) {
         boolean singleQuote = false;
         boolean doubleQuote = false;
         boolean backtick = false;
@@ -327,6 +339,19 @@ public class SqlPolicyService {
                     reject("DATABASE_LINK_FORBIDDEN", "禁止数据库链接或远程表引用");
                 }
                 reject("SESSION_VARIABLE_FORBIDDEN", "禁止读取或修改数据库会话变量");
+            } else if (current == '/' && next == '*' && index + 2 < sql.length()
+                    && sql.charAt(index + 2) == '+' && !hints.isEmpty()) {
+                int end = sql.indexOf("*/", index + 3);
+                if (end < 0) reject("SQL_HINT_FORBIDDEN", "Hint 未闭合");
+                String content = sql.substring(index + 3, end).trim().toUpperCase(Locale.ROOT);
+                // 只接收白名单内的无参数优化提示，版本注释、会话参数及嵌套注释不能借此通过。
+                if (content.isEmpty() || !content.matches("[A-Z_\\s]+")) {
+                    reject("SQL_HINT_FORBIDDEN", "当前仅允许白名单内的无参数 Hint");
+                }
+                for (String name : content.split("\\s+")) {
+                    if (!hints.contains(name)) reject("SQL_HINT_FORBIDDEN", "Hint 未列入当前数据库类型白名单：" + name);
+                }
+                index = end + 1;
             } else if ((current == '-' && next == '-')
                     || current == '#'
                     || (current == '/' && next == '*')) {
@@ -379,6 +404,7 @@ public class SqlPolicyService {
     }
 
     private static final class InspectionState {
+        private Set<String> customFunctions = Set.of();
         private final Set<String> cteNames = new HashSet<>();
         private final Set<String> tables = new HashSet<>();
         private final Set<String> schemas = new HashSet<>();
@@ -413,9 +439,6 @@ public class SqlPolicyService {
                     || queryBlock.isSkipLocked()
                     || queryBlock.isNoWait();
             into |= queryBlock.getInto() != null;
-            if (queryBlock.getHints() != null && !queryBlock.getHints().isEmpty()) {
-                locking = true;
-            }
             return true;
         }
 
@@ -444,7 +467,8 @@ public class SqlPolicyService {
 
         private boolean visitFunction(SQLMethodInvokeExpr function) {
             String name = function.getMethodName();
-            if (name == null || !ALLOWED_FUNCTIONS.contains(name.toUpperCase(Locale.ROOT))) {
+            if (name == null || (!ALLOWED_FUNCTIONS.contains(name.toUpperCase(Locale.ROOT))
+                    && !(function.getOwner() == null && customFunctions.contains(name.toUpperCase(Locale.ROOT))))) {
                 unknownFunctions.add(name == null ? "<unknown>" : name);
             }
             return true;

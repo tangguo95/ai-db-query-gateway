@@ -19,6 +19,23 @@ import type {
 
 type QueryValue = string | number | boolean | null | undefined
 
+export interface SqlAllowlist {
+  builtInFunctions: string[]
+  customFunctions: string[]
+  supportedHints: string[]
+  hints: string[]
+}
+
+export function sqlAllowlist(dataSourceId: string | undefined, databaseType: string) {
+  return request<SqlAllowlist>('/api/settings/sql-allowlist', {}, { dataSourceId, databaseType })
+}
+
+export function saveSqlAllowlist(kind: 'functions' | 'hints', scope: string, names: string[]) {
+  return request<void>('/api/settings/sql-allowlist/' + kind + '/' + encodeURIComponent(scope), {
+    method: 'PUT', body: JSON.stringify({ names })
+  })
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code?: string
