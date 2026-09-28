@@ -13,8 +13,6 @@ MySQL、DRDS 和 OceanBase 只读查询；服务器侧通过 SSH 执行受控命
 当前版本面向单台 macOS 或 Windows 电脑，把数据库凭据、SSH 密码或私钥、查询策略、
 服务器权限、审批和审计收敛到本机，避免在每次 AI 会话中粘贴连接凭据。
 
-![登录页面](docs/images/login.png)
-
 ## 功能概览
 
 - 支持 MySQL、DRDS（MySQL 兼容，Connector/J 5.1）、OceanBase MySQL 模式和 OceanBase Oracle 模式，并通过连接器 SPI 预留扩展点。

@@ -13,8 +13,6 @@ AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查�
 项目面向单台 macOS 或 Windows 电脑，数据库凭据、SSH 密码和私钥由网关保管，避免每次
 与 AI 对话时重复粘贴认证信息。
 
-![Login screen](docs/images/login.png)
-
 ## What it does
 
 - Supports MySQL, legacy DRDS MySQL compatibility mode (Connector/J 5.1), OceanBase MySQL mode, and OceanBase Oracle mode through a connector SPI.
