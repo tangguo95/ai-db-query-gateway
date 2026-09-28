@@ -48,7 +48,7 @@ class McpServerTest {
         assertTrue(responses.get(1).at("/result").isObject());
 
         JsonNode tools = responses.get(2).at("/result/tools");
-        assertEquals(8, tools.size());
+        assertEquals(10, tools.size());
         List<String> names = new ArrayList<>();
         tools.forEach(tool -> names.add(tool.path("name").textValue()));
         assertEquals(List.of(
@@ -59,7 +59,9 @@ class McpServerTest {
                 "execute_read_query",
                 "get_query_request",
                 "execute_approved_query",
-                "cancel_query"
+                "cancel_query",
+                "list_servers",
+                "execute_server_command"
         ), names);
         assertFalse(names.contains("create_data_source"));
         tools.forEach(tool -> {
@@ -103,7 +105,7 @@ class McpServerTest {
         assertEquals(-32602, responses.get(2).at("/error/code").intValue());
         assertEquals("2024-11-05", responses.get(3).at("/result/protocolVersion").textValue());
         assertEquals(-32002, responses.get(4).at("/error/code").intValue());
-        assertEquals(8, responses.get(5).at("/result/tools").size());
+        assertEquals(10, responses.get(5).at("/result/tools").size());
         assertEquals(-32600, responses.get(6).at("/error/code").intValue());
         assertTrue(gatewayClient.calls.isEmpty());
     }

@@ -68,6 +68,8 @@ final class HttpGatewayClient implements GatewayClient {
         }
 
         RequestSpec requestSpec = switch (toolName) {
+            case "list_servers" -> RequestSpec.get("/api/ai/servers");
+            case "execute_server_command" -> RequestSpec.post("/api/ai/servers/execute", arguments.deepCopy());
             case "list_data_sources" -> RequestSpec.get("/api/ai/data-sources");
             case "list_schemas" -> RequestSpec.get(
                     "/api/ai/data-sources/" + requiredSegment(arguments, "dataSourceId") + "/schemas"

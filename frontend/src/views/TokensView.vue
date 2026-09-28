@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage, normalizeList } from '../api/client'
-import type { AccessTokenSummary, DataSourceSummary } from '../api/types'
+import type { AccessTokenSummary, DataSourceSummary, ServerSummary } from '../api/types'
 import LoadState from '../components/LoadState.vue'
 import StateChip from '../components/StateChip.vue'
 
@@ -10,6 +10,7 @@ const loading = ref(true)
 const error = ref('')
 const tokens = ref<AccessTokenSummary[]>([])
 const dataSources = ref<DataSourceSummary[]>([])
+const servers = ref<ServerSummary[]>([])
 const createOpen = ref(false)
 const createdOpen = ref(false)
 const scopeOpen = ref(false)
@@ -22,12 +23,14 @@ const editingToken = ref<AccessTokenSummary | null>(null)
 const form = reactive({
   name: '',
   dataSourceIds: [] as string[],
+  serverIds: [] as string[],
   expiresInDays: 30,
   rawDataAcknowledged: false
 })
 
 const scopeForm = reactive({
   dataSourceIds: [] as string[],
+  serverIds: [] as string[],
   rawDataAcknowledged: false
 })
 
@@ -39,7 +42,8 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [tokenPayload, sourcePayload] = await Promise.all([api.tokens(), api.dataSources()])
+    const [tokenPayload, sourcePayload, serverPayload] = await Promise.all([api.tokens(), api.dataSources(), api.servers()])
+    servers.value = serverPayload
     tokens.value = normalizeList(tokenPayload).items
     dataSources.value = normalizeList(sourcePayload).items
   } catch (cause) {
@@ -53,6 +57,7 @@ function openCreate() {
   Object.assign(form, {
     name: '',
     dataSourceIds: [],
+    serverIds: [],
     expiresInDays: 30,
     rawDataAcknowledged: false
   })
@@ -62,6 +67,7 @@ function openCreate() {
 function openScopeEditor(token: AccessTokenSummary) {
   editingToken.value = token
   scopeForm.dataSourceIds = [...(token.dataSourceIds ?? [])]
+  scopeForm.serverIds = [...(token.serverIds ?? [])]
   scopeForm.rawDataAcknowledged = false
   scopeOpen.value = true
 }
@@ -71,8 +77,8 @@ async function create() {
     ElMessage.warning('请填写令牌用途名称')
     return
   }
-  if (!form.dataSourceIds.length) {
-    ElMessage.warning('至少选择一个允许访问的数据源')
+  if (!form.dataSourceIds.length && !form.serverIds.length) {
+    ElMessage.warning('至少选择一个允许访问的数据源或服务器')
     return
   }
   if (!form.rawDataAcknowledged) {
@@ -85,6 +91,7 @@ async function create() {
     const created = await api.createToken({
       name: form.name.trim(),
       dataSourceIds: form.dataSourceIds,
+      serverIds: form.serverIds,
       expiresInDays: form.expiresInDays,
       rawDataAcknowledged: true
     })
@@ -112,8 +119,8 @@ async function copyToken() {
 async function updateScope() {
   const token = editingToken.value
   if (!token) return
-  if (!scopeForm.dataSourceIds.length) {
-    ElMessage.warning('至少保留一个允许访问的数据源')
+  if (!scopeForm.dataSourceIds.length && !scopeForm.serverIds.length) {
+    ElMessage.warning('至少保留一个允许访问的数据源或服务器')
     return
   }
   if (!scopeForm.rawDataAcknowledged) {
@@ -122,14 +129,15 @@ async function updateScope() {
   }
   const previous = new Set(token.dataSourceIds ?? [])
   const next = new Set(scopeForm.dataSourceIds)
-  if (previous.size === next.size && [...previous].every((id) => next.has(id))) {
-    ElMessage.info('数据源范围没有变化')
+  if (previous.size === next.size && [...previous].every((id) => next.has(id))
+      && JSON.stringify([...(token.serverIds ?? [])].sort()) === JSON.stringify([...scopeForm.serverIds].sort())) {
+    ElMessage.info('资源范围没有变化')
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      '保存后原 Token 立即使用新的数据源范围，Token 内容、有效期和 MCP 配置均不会变化。',
+      '保存后原 Token 立即使用新的资源范围，Token 内容、有效期和 MCP 配置均不会变化。',
       '确认调整令牌范围',
       {
         confirmButtonText: '确认保存',
@@ -145,9 +153,10 @@ async function updateScope() {
   try {
     await api.updateTokenScope(token.id, {
       dataSourceIds: scopeForm.dataSourceIds,
+      serverIds: scopeForm.serverIds,
       rawDataAcknowledged: true
     })
-    ElMessage.success('令牌数据源范围已更新，MCP 无需重新配置')
+    ElMessage.success('令牌资源范围已更新，MCP 无需重新配置')
     scopeOpen.value = false
     editingToken.value = null
     await load()
@@ -216,14 +225,14 @@ onMounted(load)
       <div>
         <p class="eyebrow">AI 访问凭证 / 最小作用域</p>
         <h1 class="page-title">访问令牌</h1>
-        <p class="page-subtitle">令牌只显示一次，服务端仅保存摘要。每个令牌单独限制数据源范围并默认 30 天失效。</p>
+        <p class="page-subtitle">令牌只显示一次，服务端仅保存摘要。每个令牌单独限制资源范围并默认 30 天失效。</p>
       </div>
       <el-button type="primary" @click="openCreate">签发新令牌</el-button>
     </header>
 
     <div class="token-warning">
       <div class="warning-mark">原始数据</div>
-      <p><strong>查询结果不脱敏。</strong>令牌持有的 AI 客户端可能把生产数据发送到云端模型。只授予解决当前问题所需的数据源。</p>
+      <p><strong>查询结果不脱敏。</strong>令牌持有的 AI 客户端可能把生产数据发送到云端模型。只授予解决当前问题所需的数据源和服务器。</p>
       <span>每个令牌每分钟 30 次请求</span>
     </div>
 
@@ -260,6 +269,7 @@ onMounted(load)
                 <StateChip :value="tokenStatus(token)" />
               </header>
               <p>{{ sourceNames(token.dataSourceIds) }}</p>
+              <p v-if="token.serverIds?.length">服务器：{{ token.serverIds.map(id => servers.find(s => s.id === id)?.name ?? id).join(' · ') }}</p>
               <dl>
                 <div>
                   <dt>创建时间</dt>
@@ -325,6 +335,12 @@ onMounted(load)
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="允许访问的服务器">
+          <el-select v-model="form.serverIds" multiple style="width: 100%" placeholder="可只选择服务器">
+            <el-option v-for="server in servers.filter(s => s.enabled)" :key="server.id" :value="server.id"
+              :label="`${server.name} · ${server.fullAccess ? '完整权限' : '查询模式'}`" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="有效天数">
           <el-input-number v-model="form.expiresInDays" :min="1" :max="365" controls-position="right" style="width: 100%" />
         </el-form-item>
@@ -333,7 +349,7 @@ onMounted(load)
           <el-checkbox v-model="form.rawDataAcknowledged" />
           <span>
             <strong>我确认原始数据传输风险</strong>
-            查询结果不脱敏，可能由持有此令牌的客户端发送给云端 AI；我已按最小范围选择数据源。
+            查询结果及服务器输出可能由持有此令牌的客户端发送给云端 AI；我已按最小范围选择数据源和服务器。
           </span>
         </label>
       </el-form>
@@ -346,12 +362,12 @@ onMounted(load)
     <el-dialog
       v-model="scopeOpen"
       width="620px"
-      title="调整令牌数据源范围"
+      title="调整令牌资源范围"
       :close-on-click-modal="false"
     >
       <div class="scope-preservation">
         <strong>原 Token 保持不变</strong>
-        <p>这里只更新服务端的数据源作用域，不修改令牌内容、权限、有效期或 MCP 配置。</p>
+        <p>这里只更新数据源和服务器授权范围，不修改令牌内容、有效期或 MCP 配置。</p>
       </div>
       <el-form v-if="editingToken" label-position="top">
         <el-form-item label="令牌">
@@ -363,7 +379,7 @@ onMounted(load)
             multiple
             collapse-tags
             collapse-tags-tooltip
-            placeholder="至少选择一个数据源"
+            placeholder="选择数据源或下方服务器"
             style="width: 100%"
           >
             <el-option
@@ -375,11 +391,17 @@ onMounted(load)
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="允许访问的服务器">
+          <el-select v-model="scopeForm.serverIds" multiple style="width: 100%" placeholder="可只选择服务器">
+            <el-option v-for="server in servers" :key="server.id" :value="server.id" :disabled="!server.enabled"
+              :label="`${server.name} · ${!server.enabled ? '不可用，请移除' : server.fullAccess ? '完整权限' : '查询模式'}`" />
+          </el-select>
+        </el-form-item>
         <label class="risk-confirm" :class="{ checked: scopeForm.rawDataAcknowledged }">
           <el-checkbox v-model="scopeForm.rawDataAcknowledged" />
           <span>
             <strong>我确认扩大后的原始数据访问风险</strong>
-            查询结果不脱敏，可能由持有此令牌的客户端发送给云端 AI；当前选择仍符合最小必要范围。
+            查询结果及服务器输出可能由持有此令牌的客户端发送给云端 AI；当前选择仍符合最小必要范围。
           </span>
         </label>
       </el-form>

@@ -36,6 +36,20 @@ const filters = reactive({
 })
 
 const eventLabels: Record<string, string> = {
+  SERVER_DELETE_REQUESTED: '申请删除服务器配置',
+  SERVER_DELETED: '删除服务器配置',
+  SERVER_SAVE_REQUESTED: '申请保存服务器配置',
+  SERVER_SAVED: '保存服务器配置',
+  SERVER_ACCESS_CHANGE_REQUESTED: '申请修改服务器权限',
+  SERVER_ACCESS_CHANGED: '修改服务器权限',
+  SERVER_DISABLE_REQUESTED: '申请停用服务器',
+  SERVER_DISABLED: '停用服务器',
+  SERVER_TEST_REQUESTED: '申请测试 SSH 连接',
+  SERVER_TESTED: 'SSH 连接测试完成',
+  SERVER_COMMAND_REQUESTED: '提交服务器命令',
+  SERVER_COMMAND_FINISHED: '服务器命令结束',
+  SERVER_COMMAND_REJECTED: '服务器命令未完成',
+
   SQL_FUNCTION_ALLOWLIST_UPDATED: '修改函数白名单',
   SQL_HINT_ALLOWLIST_UPDATED: '修改 Hint 白名单',
   AUDIT_VIEWED: '查看审计记录',
@@ -91,11 +105,13 @@ const eventLabels: Record<string, string> = {
   TOKEN_CREATE_REQUESTED: '申请创建访问令牌',
   TOKEN_DELETED: '吊销访问令牌',
   TOKEN_DELETE_REQUESTED: '申请吊销访问令牌',
-  TOKEN_SCOPE_UPDATED: '更新令牌数据源范围',
+  TOKEN_SCOPE_UPDATED: '更新令牌资源范围',
   TOKEN_SCOPE_UPDATE_REQUESTED: '申请更新令牌范围'
 }
 
 const statusLabels: Record<string, string> = {
+  OUTPUT_LIMIT: '输出达到上限',
+  UNKNOWN: '结果未知',
   APPROVED: '已批准',
   CANCELLED: '已取消',
   EXECUTING: '执行中',
@@ -312,6 +328,7 @@ onMounted(load)
             <el-option label="全部事件" value="" />
             <el-option label="查询事件" value="QUERY" />
             <el-option label="数据源操作" value="DATASOURCE" />
+            <el-option label="服务器操作" value="SERVER" />
             <el-option label="访问令牌" value="TOKEN" />
             <el-option label="登录认证" value="LOGIN" />
             <el-option label="用户设置" value="ADMIN" />

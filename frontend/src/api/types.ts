@@ -178,6 +178,7 @@ export interface AccessTokenSummary {
   id: string
   name: string
   dataSourceIds?: string[]
+  serverIds?: string[]
   createdAt?: string
   expiresAt?: string
   lastUsedAt?: string
@@ -201,4 +202,40 @@ export interface DataSourceTestResult {
   account?: string
   findings?: string[]
   message?: string
+}
+
+export interface ServerSummary {
+  id: string
+  name: string
+  enabled: boolean
+  fullAccess: boolean
+  lastTestMessage?: string
+  updatedAt: string
+}
+
+export interface SshEndpoint {
+  host: string
+  port: number
+  username: string
+  authType: 'PASSWORD' | 'PRIVATE_KEY'
+  password?: string | null
+  privateKey?: string | null
+  passphrase?: string | null
+  fingerprint: string
+}
+
+export interface ServerConnection {
+  target: SshEndpoint
+  jump: SshEndpoint | null
+}
+
+export interface ServerResult {
+  executionId: string
+  status: string
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  truncated: boolean
+  durationMs: number
+  message: string
 }

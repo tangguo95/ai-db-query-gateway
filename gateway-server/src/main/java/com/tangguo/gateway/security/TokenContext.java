@@ -10,6 +10,10 @@ public record TokenContext(
         Set<String> permissions,
         Instant expiresAt) {
 
+    public boolean permitsServer(String serverId) {
+        return permissions.contains("server:execute:" + serverId);
+    }
+
     public boolean permitsDataSource(String dataSourceId) {
         return dataSourceIds.contains("*") || dataSourceIds.contains(dataSourceId);
     }

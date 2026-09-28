@@ -168,17 +168,25 @@ public final class ApiDtos {
 
     public record TokenCreateRequest(
             @NotBlank @Size(max = 100) String name,
-            @NotNull @Size(min = 1) List<@NotBlank @Size(max = 64) String> dataSourceIds,
+            @NotNull List<@NotBlank @Size(max = 64) String> dataSourceIds,
             @Min(1) @Max(365) Integer expiresInDays,
-            @AssertTrue(message = "必须明确确认查询结果可能发送给云端 AI")
-                    @JsonProperty("confirmCloudDataRisk")
-                    boolean confirmCloudDataRisk) {}
+            @AssertTrue(message = "必须明确确认结果可能发送给云端 AI")
+                    @JsonProperty("confirmCloudDataRisk") boolean confirmCloudDataRisk,
+            @Size(max = 100) List<@NotBlank @Size(max = 64) String> serverIds) {
+        public TokenCreateRequest(String name, List<String> dataSourceIds, Integer expiresInDays, boolean confirmed) {
+            this(name, dataSourceIds, expiresInDays, confirmed, null);
+        }
+    }
 
     public record TokenScopeUpdateRequest(
-            @NotNull @Size(min = 1, max = 100) List<@NotBlank @Size(max = 64) String> dataSourceIds,
-            @AssertTrue(message = "必须明确确认查询结果可能发送给云端 AI")
-                    @JsonProperty("confirmCloudDataRisk")
-                    boolean confirmCloudDataRisk) {}
+            @NotNull @Size(max = 100) List<@NotBlank @Size(max = 64) String> dataSourceIds,
+            @AssertTrue(message = "必须明确确认结果可能发送给云端 AI")
+                    @JsonProperty("confirmCloudDataRisk") boolean confirmCloudDataRisk,
+            @Size(max = 100) List<@NotBlank @Size(max = 64) String> serverIds) {
+        public TokenScopeUpdateRequest(List<String> dataSourceIds, boolean confirmed) {
+            this(dataSourceIds, confirmed, null);
+        }
+    }
 
     public record TokenCreated(
             String id,
@@ -187,7 +195,13 @@ public final class ApiDtos {
             List<String> dataSourceIds,
             List<String> permissions,
             Instant expiresAt,
-            Instant createdAt) {}
+            Instant createdAt) {
+        @JsonProperty("serverIds")
+        public List<String> serverIds() {
+            return permissions.stream().filter(p -> p.startsWith("server:execute:"))
+                    .map(p -> p.substring("server:execute:".length())).toList();
+        }
+    }
 
     public record TokenView(
             String id,
@@ -196,7 +210,13 @@ public final class ApiDtos {
             List<String> permissions,
             Instant expiresAt,
             Instant lastUsedAt,
-            Instant createdAt) {}
+            Instant createdAt) {
+        @JsonProperty("serverIds")
+        public List<String> serverIds() {
+            return permissions.stream().filter(p -> p.startsWith("server:execute:"))
+                    .map(p -> p.substring("server:execute:".length())).toList();
+        }
+    }
 
     public record AuditView(
             long sequenceNo,

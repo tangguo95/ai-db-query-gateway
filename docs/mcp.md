@@ -1,6 +1,6 @@
 # 本地 MCP STDIO 适配器
 
-`gateway-mcp` 将固定的八个只读工具映射到本机网关 REST API。它不包含数据库驱动，
+`gateway-mcp` 将八个数据库查询工具和两个服务器工具映射到本机网关 REST API。它不包含数据库驱动，
 不解析或放宽 SQL，也不暴露数据源管理、地址、用户名、密码、JDBC URL 和审计密钥。
 
 ## 构建与启动
@@ -36,6 +36,8 @@ AI_DB_GATEWAY_TOKEN='<scoped-token>' \
 | `get_query_request` | `GET /api/ai/queries/{queryId}` |
 | `execute_approved_query` | `POST /api/ai/queries/{queryId}/execute` |
 | `cancel_query` | `POST /api/ai/queries/{queryId}/cancel` |
+| `list_servers` | `GET /api/ai/servers` |
+| `execute_server_command` | `POST /api/ai/servers/execute` |
 
 所有请求都使用 `Authorization: Bearer ...`，禁止跟随 HTTP 重定向，也禁止使用系统
 HTTP 代理。路径参数会按单个 URI segment 编码，查询请求会先按工具 Schema 在服务端
@@ -81,3 +83,33 @@ UUID `requestId`，原始 MCP 工具参数不会被修改；后端使用该 UUID
 
 补偿取消是尽力行为：如果本机 REST 网关不可达、查询记录尚未建立或三次请求均失败，
 适配器只能停止等待结果，数据库侧查询可能继续到服务端超时。普通查询不会自动重试。
+
+## Linux 服务器命令
+
+在网页“Linux 服务器”配置直连或单级 SSH 跳板机，目标及跳板机可分别使用密码或私钥
+（支持加密私钥口令）。密码、私钥保存在原有 Keychain / DPAPI 安全存储中，编辑接口不回显。
+使用账号和密码或私钥直接连接，不要求填写或确认主机指纹。
+配置框内先测试连接，通过后才能确认保存；修改连接信息会清除测试结果，后端保存时也会
+重新校验，失败不新增或覆盖配置。保存成功后自动启用，在“访问令牌”中勾选服务器；允许
+创建仅有服务器范围的令牌，旧数据库令牌不会自动获得服务器权限。
+
+`list_servers` 返回 ID、显示名称和 `fullAccess`。`execute_server_command` 参数示例：
+
+```json
+{"serverId":"服务器 ID","command":"ps aux | head -n 20","purpose":"查看进程运行状态","timeoutSeconds":15}
+```
+
+默认查询模式允许常见查询命令的有限参数和管道，拒绝写命令、脚本、sudo、重定向、通配
+展开和复合语句；它是应用层限制，不是 Linux 账号权限隔离。命令不属于允许语法时会返回
+`SERVER_READ_ONLY_POLICY`，不会交给 Shell 执行。每台服务器的“完整权限”开关只能由网页
+管理员修改；开启后，所有授权该服务器的令牌可执行任意非交互命令，仍受 SSH 账号权限限制。
+保存连接配置会恢复查询模式。删除配置会清除凭据和令牌中的对应授权，保留审计记录，不会操作远程文件或服务。
+
+每次执行为独立会话，不保留目录或环境变量；命令等待默认 15 秒、最大 30 秒，两跳连接加
+命令的总预算为 38 秒，输出合计最多 256 KiB，全局并发 4、单服务器并发 1。返回退出码、
+stdout、stderr、耗时和状态；命令及用途进入加密审计，输出不持久化。网关会替换输出中
+与已保存认证材料完全相同的文本，但这不能识别所有敏感文件或编码后的秘密。
+
+`TIMED_OUT`、`OUTPUT_LIMIT`、`UNKNOWN` 或客户端取消只意味着停止等待/关闭连接，不能
+保证远程进程终止，也不回滚；客户端取消不会调用数据库取消接口。请先查询远程状态，
+不要自动重试有副作用的命令。首版不提供交互式终端、SFTP、多级跳板或动态验证码登录。

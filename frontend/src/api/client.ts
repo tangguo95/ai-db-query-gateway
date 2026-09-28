@@ -1,4 +1,7 @@
 import type {
+  ServerSummary,
+  ServerConnection,
+  ServerResult,
   AccessTokenSummary,
   AdminProfile,
   AuditRecord,
@@ -254,6 +257,24 @@ export function errorMessage(error: unknown): string {
 }
 
 export const api = {
+  servers: () => request<ServerSummary[]>('/api/servers'),
+  serverConnection: (id: string) => request<ServerConnection>(`/api/servers/${encodeURIComponent(id)}/connection`),
+  saveServer: (id: string | null, body: { name: string; connection: ServerConnection }) =>
+    request<ServerSummary>(id ? `/api/servers/${encodeURIComponent(id)}` : '/api/servers', {
+      method: id ? 'PUT' : 'POST', body: JSON.stringify(body)
+    }),
+  testServerConfiguration: (id: string | null, body: { name: string; connection: ServerConnection }) =>
+    request<{ reachable: boolean; message: string }>(id ? `/api/servers/${encodeURIComponent(id)}/test-connection` : '/api/servers/test-connection', {
+      method: 'POST', body: JSON.stringify(body)
+    }),
+  deleteServer: (id: string) => request<void>(`/api/servers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  testServer: (id: string) => request<ServerSummary>(`/api/servers/${encodeURIComponent(id)}/test`, { method: 'POST' }),
+  disableServer: (id: string) => request<ServerSummary>(`/api/servers/${encodeURIComponent(id)}/disable`, { method: 'POST' }),
+  serverAccess: (id: string, fullAccess: boolean) => request<ServerSummary>(`/api/servers/${encodeURIComponent(id)}/access`, {
+    method: 'PUT', body: JSON.stringify({ fullAccess, confirmFullAccess: fullAccess })
+  }),
+  executeServer: (body: { serverId: string; command: string; purpose: string; timeoutSeconds: number }) =>
+    request<ServerResult>('/api/servers/execute', { method: 'POST', body: JSON.stringify(body) }),
   setupStatus: () => request<SetupStatus>('/api/setup/status'),
   setup: (body: { bootstrapToken: string; password: string }) =>
     request<void>('/api/setup', { method: 'POST', body: JSON.stringify(body) }),
@@ -409,6 +430,7 @@ export const api = {
   createToken: (body: {
     name: string
     dataSourceIds: string[]
+    serverIds?: string[]
     expiresInDays: number
     rawDataAcknowledged: boolean
   }) => request<AccessTokenSummary>('/api/tokens', {
@@ -416,17 +438,19 @@ export const api = {
     body: JSON.stringify({
       name: body.name,
       dataSourceIds: body.dataSourceIds,
+      serverIds: body.serverIds,
       expiresInDays: body.expiresInDays,
       confirmCloudDataRisk: body.rawDataAcknowledged
     })
   }),
   updateTokenScope: (
     id: string,
-    body: { dataSourceIds: string[]; rawDataAcknowledged: boolean }
+    body: { dataSourceIds: string[]; serverIds?: string[]; rawDataAcknowledged: boolean }
   ) => request<AccessTokenSummary>(`/api/tokens/${encodeURIComponent(id)}/scope`, {
     method: 'PUT',
     body: JSON.stringify({
       dataSourceIds: body.dataSourceIds,
+      serverIds: body.serverIds,
       confirmCloudDataRisk: body.rawDataAcknowledged
     })
   }),

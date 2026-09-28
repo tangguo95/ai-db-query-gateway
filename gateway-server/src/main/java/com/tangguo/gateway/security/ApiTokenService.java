@@ -52,8 +52,10 @@ public class ApiTokenService {
                 ActorType.ADMIN,
                 "TOKEN_CREATE_REQUESTED",
                 "REQUESTED",
-                java.util.Map.of("name", request.name(), "dataSourceIds", request.dataSourceIds())));
-        validateDataSourceScope(request.dataSourceIds());
+                java.util.Map.of("name", request.name(), "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds())));
+        List<String> serverIds = request.serverIds() == null ? List.of() : request.serverIds().stream().distinct().toList();
+        validateResourceScope(request.dataSourceIds(), serverIds);
+        List<String> permissions = permissions(DEFAULT_PERMISSIONS, serverIds);
         String id = UUID.randomUUID().toString();
         byte[] random = new byte[32];
         new SecureRandom().nextBytes(random);
@@ -72,7 +74,7 @@ public class ApiTokenService {
                     request.name(),
                     BootstrapService.sha256(rawToken),
                     objectMapper.writeValueAsString(request.dataSourceIds()),
-                    objectMapper.writeValueAsString(DEFAULT_PERMISSIONS),
+                    objectMapper.writeValueAsString(permissions),
                     expiresAt.toString(),
                     now.toString());
         } catch (JacksonException exception) {
@@ -83,9 +85,9 @@ public class ApiTokenService {
                 ActorType.ADMIN,
                 "TOKEN_CREATED",
                 "SUCCESS",
-                java.util.Map.of("tokenId", id, "name", request.name(), "dataSourceIds", request.dataSourceIds())));
+                java.util.Map.of("tokenId", id, "name", request.name(), "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds())));
         return new TokenCreated(
-                id, request.name(), rawToken, request.dataSourceIds(), DEFAULT_PERMISSIONS, expiresAt, now);
+                id, request.name(), rawToken, request.dataSourceIds(), permissions, expiresAt, now);
     }
 
     public List<TokenView> list() {
@@ -105,7 +107,7 @@ public class ApiTokenService {
     }
 
     /**
-     * 只替换令牌的数据源作用域；摘要、权限和有效期保持不变，因此已配置的 MCP 无需换 Token。
+     * 只替换资源作用域；摘要、数据库权限和有效期保持不变，因此已配置的 MCP 无需换 Token。
      */
     public TokenView updateScope(String id, TokenScopeUpdateRequest request, String actor) {
         auditService.record(AuditCommand.simple(
@@ -113,7 +115,7 @@ public class ApiTokenService {
                 ActorType.ADMIN,
                 "TOKEN_SCOPE_UPDATE_REQUESTED",
                 "REQUESTED",
-                java.util.Map.of("tokenId", id, "dataSourceIds", request.dataSourceIds())));
+                java.util.Map.of("tokenId", id, "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds())));
         TokenView current = findToken(id);
         if (!current.expiresAt().isAfter(Instant.now())) {
             throw new GatewayException(
@@ -128,11 +130,14 @@ public class ApiTokenService {
                     "必须明确确认查询结果可能发送给云端 AI");
         }
         List<String> dataSourceIds = request.dataSourceIds().stream().distinct().toList();
-        validateDataSourceScope(dataSourceIds);
+        // 老客户端不传服务器范围时保留已有授权；显式空数组表示撤销服务器授权。
+        List<String> serverIds = request.serverIds() == null ? current.serverIds() : request.serverIds().stream().distinct().toList();
+        validateResourceScope(dataSourceIds, serverIds);
         try {
             int changed = jdbcTemplate.update(
-                    "UPDATE api_token SET data_source_scope = ? WHERE id = ?",
+                    "UPDATE api_token SET data_source_scope = ?, permissions = ? WHERE id = ?",
                     objectMapper.writeValueAsString(dataSourceIds),
+                    objectMapper.writeValueAsString(permissions(current.permissions(), serverIds)),
                     id);
             if (changed == 0) {
                 throw new GatewayException(HttpStatus.NOT_FOUND, "TOKEN_NOT_FOUND", "访问令牌不存在");
@@ -151,7 +156,8 @@ public class ApiTokenService {
                         "previousDataSourceIds",
                         current.dataSourceIds(),
                         "dataSourceIds",
-                        dataSourceIds)));
+                        dataSourceIds,
+                        "serverIds", serverIds)));
         return findToken(id);
     }
 
@@ -209,6 +215,25 @@ public class ApiTokenService {
                         : previous);
         if (window.count.incrementAndGet() > properties.getSecurity().getTokenRatePerMinute()) {
             throw new GatewayException(HttpStatus.TOO_MANY_REQUESTS, "TOKEN_RATE_LIMITED", "访问令牌请求过于频繁");
+        }
+    }
+
+    private List<String> permissions(List<String> existing, List<String> serverIds) {
+        var permissions = new java.util.ArrayList<>(existing.stream().filter(p -> !p.startsWith("server:execute:")).toList());
+        serverIds.forEach(id -> permissions.add("server:execute:" + id));
+        return List.copyOf(permissions);
+    }
+
+    private void validateResourceScope(List<String> dataSourceIds, List<String> serverIds) {
+        if (dataSourceIds.isEmpty() && serverIds.isEmpty()) {
+            throw new GatewayException(HttpStatus.BAD_REQUEST, "EMPTY_TOKEN_SCOPE", "至少选择一个数据源或服务器");
+        }
+        validateDataSourceScope(dataSourceIds);
+        for (String id : serverIds) {
+            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM server_config WHERE id=? AND enabled=1", Integer.class, id);
+            if (count == null || count == 0) {
+                throw new GatewayException(HttpStatus.BAD_REQUEST, "SERVER_NOT_AVAILABLE", "令牌只能绑定已通过连接测试且启用的服务器");
+            }
         }
     }
 
