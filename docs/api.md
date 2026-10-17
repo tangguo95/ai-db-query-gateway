@@ -1,16 +1,18 @@
 # REST API
 
-服务默认基址为 `http://127.0.0.1:8765`。网页接口使用管理员 Session + CSRF；
-`/api/ai/**` 只接受作用域 Bearer Token，并忽略网页 Session 的管理权限。
+服务默认基址为 `http://127.0.0.1:8765`。网页接口使用回环地址的固定本地管理员身份及 CSRF，无需密码登录；
+`/api/ai/**` 只接受作用域 Bearer Token，不会继承网页的管理员权限。
 
 ## 网页管理接口
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| `GET` | `/api/setup/status` | 初始化状态并建立 CSRF cookie |
-| `POST` | `/api/setup` | 消费一次性 bootstrap token |
-| `POST` | `/api/auth/login` | 管理员登录 |
-| `POST` | `/api/auth/logout` | 注销并失效 Session |
+| `GET` | `/api/setup/status` | 兼容旧客户端，返回已就绪且无需初始化，并建立 CSRF cookie |
+| `POST` | `/api/setup` | 已停用，返回 410 `LOCAL_LOGIN_REMOVED` |
+| `POST` | `/api/auth/login` | 已停用，返回 410 `LOCAL_LOGIN_REMOVED` |
+| `POST` | `/api/auth/logout` | 已停用，返回 410 `LOCAL_LOGIN_REMOVED` |
+| `GET` | `/api/auth/me` | 返回固定本地管理员身份并建立 CSRF cookie |
+| `PUT` | `/api/profile/password` | 已停用，返回 410 `LOCAL_LOGIN_REMOVED` |
 | `GET` | `/api/dashboard` | 安全状态汇总 |
 | `GET/PUT` | `/api/settings/query-approval` | 查看/修改高风险 AI 查询审批开关 |
 | `GET/PUT` | `/api/settings/data-source-recovery` | 查看/修改隔离数据源的自动连接复检开关 |

@@ -1,7 +1,7 @@
 # 架构与状态机
 
 ```text
-浏览器 ── Session + CSRF ──────────────┐
+浏览器 ── 本机身份 + CSRF ──────────────┐
                                        v
 AI 客户端 ── STDIO ── MCP ── Bearer ─> Spring Boot 网关
 Windows 托盘 ── health / service control ─┘
@@ -88,7 +88,7 @@ EXECUTING ──> EXECUTED | FAILED | TIMED_OUT | CANCELLED
 SQLite 保存：
 
 - 数据源显示信息、`secretRef`、只读状态和复检时间；
-- Argon2id 管理员密码摘要；
+- 旧版本的管理员密码摘要（保留兼容，不再用于网页登录）；
 - API Token 摘要、作用域和有效期；
 - 加密查询申请、审批状态和审计链。
 

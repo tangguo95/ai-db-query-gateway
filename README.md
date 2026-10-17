@@ -15,6 +15,7 @@ AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查�
 
 ## What it does
 
+- 本机免登录：打开网页直接进入控制台，使用固定的本地管理员身份；MCP 仍使用独立的作用域令牌。
 - Supports MySQL, legacy DRDS MySQL compatibility mode (Connector/J 5.1), OceanBase MySQL mode, and OceanBase Oracle mode through a connector SPI.
 - Keeps database credentials and audit encryption keys in macOS Keychain or Windows current-user
   DPAPI-protected ciphertext files; SQLite stores metadata, scope information, and the audit chain
@@ -97,7 +98,7 @@ the required `SELECT` permissions.
 ## Architecture
 
 ```text
-Browser console ── session + CSRF ──┐
+Browser console ── 本机身份 + CSRF ──┐
                                     v
 AI client ── STDIO ── MCP ── token ──> Spring Boot gateway
                                       │
@@ -109,9 +110,8 @@ AI client ── STDIO ── MCP ── token ──> Spring Boot gateway
                                       └─ SSH 命令执行 ──> Linux（直连 / 单级跳板机）
 ```
 
-The service listens on `127.0.0.1:8765` by default. It is not a database TCP proxy and it
-does not provide remote HTTP MCP. Non-loopback binding requires explicit remote mode and
-Spring TLS configuration.
+服务默认监听 `127.0.0.1:8765`，不是数据库 TCP 代理，也不提供远程 HTTP MCP。
+本机免登录模式会拒绝非回环监听及远程模式。
 
 ## Requirements
 
@@ -145,19 +145,11 @@ Set-Location ai-db-query-gateway
 .\scripts\run-tray.ps1
 ```
 
-Open <http://127.0.0.1:8765>. On the first launch the service creates a one-time
-`bootstrap-token` file at:
-
-```text
-macOS:   ~/Library/Application Support/AI DB Query Gateway/bootstrap-token
-Windows: %LOCALAPPDATA%\AI DB Query Gateway\bootstrap-token
-```
-
-Set `GATEWAY_DATA_DIR` to override the runtime directory on either platform.
-
-Read the token locally and enter it in the setup page to choose the local administrator
-password. The token is deleted after successful setup and the password is stored only as an
-Argon2id hash.
+打开 <http://127.0.0.1:8765> 即可进入控制台，使用固定的“本地管理员”身份，无需初始化密码或登录。
+首次访问自动建立 CSRF cookie；写请求仍受 CSRF、Host/Origin 校验和审计保护。
+MCP 仍需作用域令牌，网页免登录不会扩大已有令牌的数据库或服务器授权。
+本机免登录意味着信任能访问本机控制台的程序，不用于远程部署，也不支持远程监听。
+旧的 `/login`、`/setup` 页面地址会自动跳转控制台；升级沿用现有连接、令牌和审计数据。
 
 The default runtime directory is:
 
@@ -166,9 +158,10 @@ macOS:   ~/Library/Application Support/AI DB Query Gateway/
 Windows: %LOCALAPPDATA%\AI DB Query Gateway\
 ```
 
-It contains the SQLite control database and bootstrap state. Database credentials and audit keys
-are stored separately in the platform secure store; they are not put in the repository, process
-arguments, environment variables, or ordinary logs.
+也可以通过 `GATEWAY_DATA_DIR` 指定运行目录。
+
+该目录保存 SQLite 控制库、连接配置和审计元数据。数据库凭据、SSH 认证材料和审计密钥
+独立保存在平台安全存储中，不进入仓库、进程参数、环境变量或普通日志。
 
 The launchd command is a manually loaded user service, not a login shortcut. It stays running
 after the terminal is closed and restarts after an unexpected crash, but it is not loaded after
@@ -252,6 +245,8 @@ the client's private secret configuration:
 }
 ```
 
+如果桌面客户端启动时找不到 Java，请将 `command` 改为本机 Java 21 可执行文件的绝对路径。
+
 Never commit that configuration or paste a live token into an issue, chat, shell history, or
 README. 令牌只显示一次，之后可以调整数据源和服务器范围，无需重新生成令牌或修改 MCP 配置。
 
@@ -297,6 +292,11 @@ scripts/                  Reproducible build, run, and token setup scripts (shel
 ```
 
 ## Development and verification
+
+下面的验证命令会重新生成 `target/` 中的 JAR。网关已运行时，请先停止服务再执行，
+完成后重新启动，避免覆盖正在使用的 JAR 导致页面或类加载异常。macOS 使用
+`./scripts/launchd.sh stop` / `start`，Windows 使用 `.\scripts\windows-service.ps1 stop` / `start`。
+仅需编译和运行测试、不重新打包时，可使用 `./mvnw test`（Windows：`.\mvnw.cmd test`）。
 
 ```bash
 ./mvnw clean verify

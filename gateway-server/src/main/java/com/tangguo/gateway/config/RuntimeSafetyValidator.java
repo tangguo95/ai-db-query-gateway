@@ -19,13 +19,10 @@ public class RuntimeSafetyValidator {
     @PostConstruct
     void validateBindAddress() {
         String address = environment.getProperty("server.address", "127.0.0.1");
-        if (isLoopback(address)) {
+        if (isLoopback(address) && !properties.isRemoteEnabled()) {
             return;
         }
-        boolean sslEnabled = environment.getProperty("server.ssl.enabled", Boolean.class, false);
-        if (!properties.isRemoteEnabled() || !sslEnabled) {
-            throw new IllegalStateException("非回环地址启动必须同时显式启用 gateway.remote-enabled 和 TLS");
-        }
+        throw new IllegalStateException("本机免登录模式仅允许回环监听，不能启用远程模式");
     }
 
     private boolean isLoopback(String address) {

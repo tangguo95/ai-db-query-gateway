@@ -2,7 +2,6 @@ package com.tangguo.gateway.security;
 
 import com.tangguo.gateway.config.FileSecurity;
 import com.tangguo.gateway.config.GatewayProperties;
-import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -36,7 +35,7 @@ public class BootstrapService {
                 Path.of(properties.getDataDir()).toAbsolutePath().normalize().resolve(BOOTSTRAP_FILE_NAME);
     }
 
-    @PostConstruct
+    // 保留旧密码数据和兼容代码；本机免登录启动不再生成初始化令牌。
     void prepareBootstrapToken() {
         if (isInitialized()) {
             deleteBootstrapTokenFile();

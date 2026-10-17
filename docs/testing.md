@@ -76,7 +76,7 @@ GATEWAY_PORT=18765 \
 java -jar gateway-server/target/gateway-server-0.1.0-SNAPSHOT.jar
 ```
 
-仅用于验证启动、静态页面、CSRF、setup/login、Token、Host/Origin 拒绝和审计链；内存
+仅用于验证启动、静态页面、CSRF、本机免登录、Token、Host/Origin 拒绝和审计链；内存
 SecretStore 禁止连接生产库。完成后停止进程并删除刚创建的明确临时目录。
 
 Windows 可使用当前用户 DPAPI 直接烟测，不需要 `GATEWAY_ALLOW_IN_MEMORY_SECRETS=true`：
@@ -115,14 +115,14 @@ OceanBase Oracle 不适合用 mock 代替驱动兼容验收。若当前机器没
 ## 安全验收清单
 
 - 仓库、`gateway.db`、进程参数和日志不含数据库明文凭据或 Token。
-- `bootstrap-token` 为 `0600`，初始化后不存在。
+- 首次打开控制台无需初始化或登录；启动不生成 `bootstrap-token`；旧 `/login`、`/setup` 地址跳转控制台。
 - 非查询 SQL 在业务库连接前失败。
 - Token 不能访问未授权数据源或任何 `/api/datasources` 管理能力。
 - CSRF、恶意 Host/Origin、无 Bearer AI 请求和超限请求被拒绝并有审计事件。
 - 查询结果只在响应出现；审计页不显示完整 SQL、参数或结果。
 - 修改任意历史审计 HMAC 后，校验失败且后续操作 fail-closed。
 - 取消与执行终态不会互相覆盖；取消失败会隔离物理连接池。
-- 非回环地址在未同时显式开启远程模式和 TLS 时拒绝启动。
+- 非回环地址或开启远程模式时拒绝启动，即使配置 TLS 也不放行。
 
 ## 当前测试边界
 

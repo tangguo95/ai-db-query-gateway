@@ -15,6 +15,7 @@ MySQL、DRDS 和 OceanBase 只读查询；服务器侧通过 SSH 执行受控命
 
 ## 功能概览
 
+- 本机免登录：打开网页直接进入控制台，使用固定的本地管理员身份；MCP 仍使用独立的作用域令牌。
 - 支持 MySQL、DRDS（MySQL 兼容，Connector/J 5.1）、OceanBase MySQL 模式和 OceanBase Oracle 模式，并通过连接器 SPI 预留扩展点。
 - 数据库凭据、SSH 密码或私钥及审计加密密钥保存在 macOS Keychain 或 Windows 当前用户 DPAPI 保护的本地密文文件；
   SQLite 保存元数据、作用域和审计链，不保存明文凭据。
@@ -92,11 +93,11 @@ AI 可以通过 MCP 自行编写并执行 Linux 命令，无需预设运维操�
 ## 架构
 
 ```text
-网页控制台 ── Session + CSRF ──┐
+网页控制台 ── 本机身份 + CSRF ──┐
                               v
 AI 客户端 ── STDIO ── MCP ──令牌──> Spring Boot 网关
                                   │
-                                  ├─ 登录认证和令牌作用域
+                                  ├─ 本机身份和令牌作用域
                                   ├─ SQL AST 策略和风险审批
                                   ├─ SQLite 控制面与链式 HMAC 审计
                                   ├─ macOS Keychain / Windows DPAPI 凭据引用
@@ -104,8 +105,7 @@ AI 客户端 ── STDIO ── MCP ──令牌──> Spring Boot 网关
                                   └─ SSH 命令执行 ──> Linux（直连 / 单级跳板机）
 ```
 
-服务默认监听 `127.0.0.1:8765`，不是数据库 TCP 代理，也不提供远程 HTTP MCP。非回环监听
-必须显式开启远程模式并配置 Spring TLS。
+服务默认监听 `127.0.0.1:8765`，不是数据库 TCP 代理，也不提供远程 HTTP MCP。非回环监听及远程模式会被拒绝。
 
 ## 环境要求
 
@@ -139,14 +139,11 @@ Set-Location ai-db-query-gateway
 .\scripts\run-tray.ps1
 ```
 
-打开 <http://127.0.0.1:8765>。第一次启动时，服务会创建一次性文件：
-
-macOS 路径为 `~/Library/Application Support/AI DB Query Gateway/bootstrap-token`；Windows
-路径为 `%LOCALAPPDATA%\AI DB Query Gateway\bootstrap-token`。也可以通过
-`GATEWAY_DATA_DIR` 指定运行目录。
-
-只在本机读取该文件，将令牌输入初始化页面并设置本地管理员密码。初始化成功后文件会删除，
-密码只保存为 Argon2id 摘要。
+打开 <http://127.0.0.1:8765> 即可进入控制台，使用固定的“本地管理员”身份，无需初始化密码或登录。
+首次访问自动建立 CSRF cookie；写请求仍受 CSRF、Host/Origin 校验和审计保护。
+MCP 仍需作用域令牌，网页免登录不会扩大已有令牌的数据库或服务器授权。
+本机免登录意味着信任能访问本机控制台的程序，不用于远程部署，也不支持远程监听。
+旧的 `/login`、`/setup` 页面地址会自动跳转控制台；升级沿用现有连接、令牌和审计数据。
 
 默认运行目录为：
 
@@ -155,7 +152,9 @@ macOS:   ~/Library/Application Support/AI DB Query Gateway/
 Windows: %LOCALAPPDATA%\AI DB Query Gateway\
 ```
 
-其中包含 SQLite 控制库和初始化状态。数据库凭据与审计密钥独立保存在平台安全存储中，不会
+也可以通过 `GATEWAY_DATA_DIR` 指定运行目录。
+
+其中包含 SQLite 控制库、连接配置和审计元数据。数据库凭据与审计密钥独立保存在平台安全存储中，不会
 进入仓库、进程参数、环境变量或普通日志。
 
 `launchd` 这里是手动加载的用户服务，不是登录快捷方式：关闭终端后服务仍会运行，异常退出会自动
@@ -248,6 +247,8 @@ open "native/statusbar/build/AI DB Query Gateway.app"
 }
 ```
 
+如果桌面客户端启动时找不到 Java，请将 `command` 改为本机 Java 21 可执行文件的绝对路径。
+
 不要把该配置提交到仓库，也不要把有效令牌粘贴到 Issue、聊天、命令行参数或 README。网页只
 显示一次令牌；之后可以直接调整令牌的数据源和服务器范围，不需要重新生成令牌或重新配置 MCP。
 
@@ -288,6 +289,11 @@ scripts/                  可复现构建、启动和令牌配置脚本（含 ma
 ```
 
 ## 开发与验证
+
+下面的验证命令会重新生成 `target/` 中的 JAR。网关已运行时，请先停止服务再执行，
+完成后重新启动，避免覆盖正在使用的 JAR 导致页面或类加载异常。macOS 使用
+`./scripts/launchd.sh stop` / `start`，Windows 使用 `.\scripts\windows-service.ps1 stop` / `start`。
+仅需编译和运行测试、不重新打包时，可使用 `./mvnw test`（Windows：`.\mvnw.cmd test`）。
 
 ```bash
 ./mvnw clean verify

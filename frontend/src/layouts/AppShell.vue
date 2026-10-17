@@ -18,10 +18,8 @@ const profile = ref<AdminProfile | null>(null)
 const profileLoaded = ref(false)
 const profileOpen = ref(false)
 const profileSaving = ref(false)
-const passwordSaving = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
 const profileForm = reactive({ displayName: '', avatarDataUrl: '' })
-const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
 let clockTimer: number | undefined
 let approvalTimer: number | undefined
 
@@ -102,18 +100,12 @@ async function openProfileSettings() {
   if (!profileLoaded.value) await loadProfile()
   profileForm.displayName = profileName.value
   profileForm.avatarDataUrl = profile.value?.avatarDataUrl || ''
-  passwordForm.currentPassword = ''
-  passwordForm.newPassword = ''
-  passwordForm.confirmPassword = ''
   profileOpen.value = true
 }
 
 function resetProfileForms() {
   profileForm.displayName = ''
   profileForm.avatarDataUrl = ''
-  passwordForm.currentPassword = ''
-  passwordForm.newPassword = ''
-  passwordForm.confirmPassword = ''
 }
 
 function chooseAvatar() {
@@ -178,49 +170,11 @@ async function saveProfile() {
   }
 }
 
-async function changePassword() {
-  if (!passwordForm.currentPassword) {
-    ElMessage.warning('请输入当前密码')
-    return
-  }
-  if (passwordForm.newPassword.length < 12) {
-    ElMessage.warning('新密码至少需要 12 个字符')
-    return
-  }
-  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-    ElMessage.warning('两次输入的新密码不一致')
-    return
-  }
-  passwordSaving.value = true
-  try {
-    await api.changePassword({ ...passwordForm })
-    passwordForm.currentPassword = ''
-    passwordForm.newPassword = ''
-    passwordForm.confirmPassword = ''
-    ElMessage.success('管理员密码已修改，下次登录请使用新密码')
-  } catch (error) {
-    ElMessage.error(errorMessage(error))
-  } finally {
-    passwordSaving.value = false
-  }
-}
-
 function handleProfileCommand(command: string) {
   if (command === 'settings') {
     openProfileSettings()
   } else if (command === 'security') {
     void router.push('/security')
-  } else if (command === 'logout') {
-    void logout()
-  }
-}
-
-async function logout() {
-  try {
-    await auth.logout()
-  } finally {
-    profile.value = null
-    await router.replace({ name: 'login' })
   }
 }
 
@@ -267,7 +221,7 @@ watch(() => route.path, (path) => {
             </span>
             <span class="profile-copy">
               <strong>{{ profileName }}</strong>
-              <small>管理员账户</small>
+              <small>本地管理员 · 免登录</small>
             </span>
             <span class="profile-menu-hint">
               <span>用户设置</span>
@@ -278,7 +232,6 @@ watch(() => route.path, (path) => {
             <el-dropdown-menu>
               <el-dropdown-item command="settings">用户设置</el-dropdown-item>
               <el-dropdown-item command="security">安全设置</el-dropdown-item>
-              <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -397,34 +350,6 @@ watch(() => route.path, (path) => {
           <div class="dialog-actions">
             <button class="dialog-button dialog-button-primary" type="button" :disabled="profileSaving" @click="saveProfile">
               {{ profileSaving ? '保存中…' : '保存基本信息' }}
-            </button>
-          </div>
-        </section>
-
-        <section class="profile-section">
-          <div class="profile-section-heading">
-            <div>
-              <h2>修改管理员密码</h2>
-              <p>密码只用于本地网页登录，不会展示或写入普通日志。</p>
-            </div>
-          </div>
-          <div class="password-grid">
-            <label class="dialog-field password-field-wide">
-              <span>当前密码</span>
-              <input v-model="passwordForm.currentPassword" type="password" autocomplete="current-password" />
-            </label>
-            <label class="dialog-field">
-              <span>新密码</span>
-              <input v-model="passwordForm.newPassword" type="password" minlength="12" autocomplete="new-password" />
-            </label>
-            <label class="dialog-field">
-              <span>确认新密码</span>
-              <input v-model="passwordForm.confirmPassword" type="password" minlength="12" autocomplete="new-password" />
-            </label>
-          </div>
-          <div class="dialog-actions password-actions">
-            <button class="dialog-button dialog-button-primary" type="button" :disabled="passwordSaving" @click="changePassword">
-              {{ passwordSaving ? '修改中…' : '修改密码' }}
             </button>
           </div>
         </section>

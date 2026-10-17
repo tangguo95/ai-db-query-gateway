@@ -1,15 +1,12 @@
 import { defineStore } from 'pinia'
-import { api } from '../api/client'
+import { api, errorMessage } from '../api/client'
 import type { CurrentUser } from '../api/types'
-
-function setupConfigured(status: Awaited<ReturnType<typeof api.setupStatus>>): boolean {
-  return Boolean(status.configured ?? status.initialized ?? status.setupComplete)
-}
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     ready: false,
     configured: false,
+    error: '',
     user: null as CurrentUser | null
   }),
   getters: {
@@ -19,16 +16,13 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async bootstrap() {
       if (this.ready) return
+      this.error = ''
       try {
-        const status = await api.setupStatus()
-        this.configured = setupConfigured(status)
-        if (this.configured) {
-          try {
-            this.user = await api.currentUser()
-          } catch {
-            this.user = null
-          }
-        }
+        this.user = await api.currentUser()
+        this.configured = true
+      } catch (cause) {
+        this.user = null
+        this.error = errorMessage(cause)
       } finally {
         this.ready = true
       }
@@ -56,6 +50,7 @@ export const useAuthStore = defineStore('auth', {
     },
     markUnauthenticated() {
       this.user = null
+      this.error = '本机请求认证失败，请检查网关状态后重试'
     }
   }
 })

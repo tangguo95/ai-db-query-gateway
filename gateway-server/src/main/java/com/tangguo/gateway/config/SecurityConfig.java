@@ -1,6 +1,6 @@
 package com.tangguo.gateway.config;
 
-import com.tangguo.gateway.security.AbsoluteSessionTimeoutFilter;
+import com.tangguo.gateway.security.LocalAdminAuthenticationFilter;
 import com.tangguo.gateway.audit.AuditService;
 import com.tangguo.gateway.security.ActorContext;
 import com.tangguo.gateway.security.ApiTokenService;
@@ -52,9 +52,6 @@ public class SecurityConfig {
                                 "/index.html",
                                 "/assets/**",
                                 "/favicon.ico",
-                                "/api/setup/status",
-                                "/api/setup",
-                                "/api/auth/login",
                                 "/actuator/health")
                         .permitAll()
                         .requestMatchers("/api/ai/**")
@@ -81,7 +78,7 @@ public class SecurityConfig {
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                             objectMapper.writeValue(
                                     response.getOutputStream(),
-                                    Map.of("status", 401, "code", "UNAUTHENTICATED", "message", "请先登录"));
+                                    Map.of("status", 401, "code", "UNAUTHENTICATED", "message", "请求未通过本机或令牌认证"));
                         })
                         .accessDeniedHandler((request, response, exception) -> {
                             response.setStatus(403);
@@ -93,8 +90,7 @@ public class SecurityConfig {
                 .addFilterBefore(
                         new RequestSafetyFilter(properties, auditService, actorContext),
                         UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(
-                        new AbsoluteSessionTimeoutFilter(properties), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new LocalAdminAuthenticationFilter(), RequestSafetyFilter.class)
                 .addFilterBefore(
                         new BearerTokenFilter(tokenService, objectMapper), UsernamePasswordAuthenticationFilter.class);
         return http.build();

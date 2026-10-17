@@ -2,18 +2,8 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 
 const routes: RouteRecordRaw[] = [
-  {
-    path: '/setup',
-    name: 'setup',
-    component: () => import('../views/SetupView.vue'),
-    meta: { public: true }
-  },
-  {
-    path: '/login',
-    name: 'login',
-    component: () => import('../views/LoginView.vue'),
-    meta: { public: true }
-  },
+  { path: '/setup', redirect: '/dashboard' },
+  { path: '/login', redirect: '/dashboard' },
   {
     path: '/',
     component: () => import('../layouts/AppShell.vue'),
@@ -38,14 +28,9 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 })
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach(async () => {
   const auth = useAuthStore()
   await auth.bootstrap()
-
-  if (!auth.configured && to.name !== 'setup') return { name: 'setup' }
-  if (auth.configured && to.name === 'setup') return auth.authenticated ? { name: 'dashboard' } : { name: 'login' }
-  if (!to.meta.public && !auth.authenticated) return { name: 'login', query: { redirect: to.fullPath } }
-  if (to.name === 'login' && auth.authenticated) return { name: 'dashboard' }
   return true
 })
 

@@ -6,11 +6,14 @@ import { useAuthStore } from './stores/auth'
 const auth = useAuthStore()
 const router = useRouter()
 
+async function retryBootstrap() {
+  auth.ready = false
+  await auth.bootstrap()
+}
+
 const handleUnauthorized = () => {
   auth.markUnauthenticated()
-  if (router.currentRoute.value.name !== 'login') {
-    void router.replace({ name: 'login', query: { redirect: router.currentRoute.value.fullPath } })
-  }
+  // 本机免登录不跳转登录页；保持当前页面，由具体请求展示认证或服务异常。
 }
 
 onMounted(async () => {
@@ -31,6 +34,10 @@ onBeforeUnmount(() => window.removeEventListener('gateway:unauthorized', handleU
       </div>
       <div class="boot-track"><span /></div>
       <p>正在校验本地安全边界</p>
+    </div>
+    <div v-else-if="auth.error" class="boot-screen" role="alert">
+      <p>{{ auth.error }}</p>
+      <button type="button" @click="retryBootstrap">重新连接网关</button>
     </div>
     <RouterView v-else />
   </div>

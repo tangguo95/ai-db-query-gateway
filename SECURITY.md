@@ -6,7 +6,7 @@ AI DB Query Gateway 是本机查询安全边界，不是数据库权限系统的
 
 ## 能保证什么
 
-- AI Token 只能调用八个查询/元数据工具，不能调用数据源、凭据、Token 或审计管理接口。
+- AI Token 只能调用获授权的数据库查询/元数据及服务器命令工具，不能调用连接、凭据、Token 或审计管理接口。
 - 所有非查询 SQL 在创建业务库 JDBC 连接前拒绝；未知语法和未知函数 fail-closed。
 - 数据源不读取数据库账号授权；连接成功后统一进入 `COMPATIBILITY`，每次查询审计
   都明确标记为应用层只读。
@@ -61,14 +61,21 @@ REST 客户端被强制杀死、网络栈没有及时向 Servlet 容器报告断
 
 ## 本机与网络边界
 
+网页无需设置密码或登录，回环地址请求使用固定的本地管理员身份；不生成初始化令牌。
+保留 CSRF、Host/Origin 校验和审计。旧的 `/login`、`/setup` 页面地址跳转控制台，旧密码
+数据不迁移或清除，但不再用于网页登录。MCP `/api/ai/**` 仍强制使用作用域 Bearer Token，
+合法、无效或缺失的 Token 均不会因网页免登录而自动获得管理权限。
+
+能访问本机控制台的其他程序也能够调用管理接口；CSRF 和来源校验不隔离本机进程。
+本模式适用于个人可信电脑，依赖操作系统账户与屏幕锁，不支持远程部署。
+
+
 - 默认只监听 `127.0.0.1`；不要随意使用反向代理、端口转发或共享操作系统账号。
-- 非回环地址只有在 `gateway.remote-enabled=true` 且 Spring TLS 已启用时才可启动。
-  第一版没有团队 RBAC、OIDC 或远程 MCP，因此不建议启用远程模式。
+- 非回环地址或 `gateway.remote-enabled=true` 均拒绝启动，TLS 不会放宽免登录的本机边界。
 - `scripts/run.sh` 拒绝缺失、不可执行或符号链接形式的 Keychain helper；Java 进程还会
   校验 owner、写权限和运行期摘要。
 - macOS Application Support 运行目录尽量设置为 `0700`、令牌文件为 `0600`；Windows 使用
-  当前用户目录的继承 ACL，并用 DPAPI 保护 `secrets/` 密文。未初始化的 `bootstrap-token`
-  在成功设置密码后删除。
+  当前用户目录的继承 ACL，并用 DPAPI 保护 `secrets/` 密文。
 - Keychain/DPAPI 的用户会话保护、屏幕锁和磁盘加密仍属于必要的宿主机控制。
 
 ## 数据库账号建议

@@ -4,20 +4,17 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage } from '../api/client'
 import type { CurrentUser, DataSourceRecoveryPolicy, Dashboard, QueryApprovalPolicy } from '../api/types'
-import { useAuthStore } from '../stores/auth'
 import LoadState from '../components/LoadState.vue'
 import StateChip from '../components/StateChip.vue'
 import SqlAllowlistPanel from '../components/SqlAllowlistPanel.vue'
 
 const router = useRouter()
-const auth = useAuthStore()
 const loading = ref(true)
 const error = ref('')
 const user = ref<CurrentUser | null>(null)
 const dashboard = ref<Dashboard | null>(null)
 const approvalPolicy = ref<QueryApprovalPolicy | null>(null)
 const recoveryPolicy = ref<DataSourceRecoveryPolicy | null>(null)
-const locking = ref(false)
 const updatingApprovalPolicy = ref(false)
 const updatingRecoveryPolicy = ref(false)
 
@@ -129,18 +126,6 @@ async function changeRecoveryMode(enabled: boolean) {
   }
 }
 
-async function lockSession() {
-  locking.value = true
-  try {
-    await auth.logout()
-    await router.replace('/login')
-  } catch (cause) {
-    ElMessage.error(errorMessage(cause))
-  } finally {
-    locking.value = false
-  }
-}
-
 function formatTime(value?: string): string {
   if (!value) return '由服务端管理'
   const date = new Date(value)
@@ -158,7 +143,6 @@ onMounted(load)
         <h1 class="page-title">安全设置</h1>
         <p class="page-subtitle">关键防线由服务端固定执行。网页只展示能够从 API 验证的状态，不推断监听地址、TLS 或 SecretStore 实现。</p>
       </div>
-      <el-button type="danger" plain :loading="locking" @click="lockSession">立即锁定会话</el-button>
     </header>
 
     <LoadState :loading="loading" :error="error" @retry="load">
@@ -182,7 +166,7 @@ onMounted(load)
             <div class="posture-info">
               <div class="posture-list">
                 <div><span>默认监听策略</span><strong>本机回环</strong></div>
-                <div><span>远程模式</span><strong>以服务端配置为准</strong></div>
+                <div><span>远程模式</span><strong>本机免登录模式不支持</strong></div>
                 <div><span>凭据存储</span><strong>不向网页公开</strong></div>
                 <div><span>结果持久化</span><strong>API 设计：不保存</strong></div>
                 <div><span>运行态认证</span><strong>尚未对外提供</strong></div>
@@ -197,25 +181,16 @@ onMounted(load)
         <section class="panel session-panel">
           <header class="panel-header">
             <div>
-              <p class="panel-title">当前操作员会话</p>
-              <span class="panel-code">Spring Security 会话</span>
+              <p class="panel-title">当前操作员</p>
+              <span class="panel-code">本机免登录</span>
             </div>
           </header>
           <div class="session-body">
             <div class="operator-avatar">{{ (user?.displayName || user?.username || 'A').slice(0, 1).toUpperCase() }}</div>
             <h2>{{ user?.displayName || user?.username || '本地管理员' }}</h2>
-            <p><span class="status-dot" />已认证 / 本机会话</p>
-            <dl>
-              <div>
-                <dt>空闲失效时间</dt>
-                <dd>{{ formatTime(user?.idleExpiresAt) }}</dd>
-              </div>
-              <div>
-                <dt>最长会话失效时间</dt>
-                <dd>{{ formatTime(user?.sessionExpiresAt) }}</dd>
-              </div>
-            </dl>
-            <el-button plain @click="load">重新校验身份</el-button>
+            <p><span class="status-dot" />本地管理员 / 免登录</p>
+            <p>网页不设置登录密码或会话失效时间，访问权限由本机运行边界控制。</p>
+            <el-button plain @click="load">刷新状态</el-button>
           </div>
         </section>
       </div>
