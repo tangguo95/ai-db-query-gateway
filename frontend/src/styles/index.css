@@ -81,10 +81,55 @@
   --el-fill-color-dark: #30445f;
   --el-border-color: #49627f;
   --el-border-color-light: #30445f;
+  --el-border-color-lighter: #263a55;
+  --el-border-color-extra-light: #20324a;
+  --el-border-color-dark: #3c5372;
+  --el-border-color-darker: #455f80;
+  --el-border-color-hover: #5b7697;
   --el-text-color-primary: #f8fafc;
   --el-text-color-regular: #d9e4f0;
   --el-text-color-secondary: #a9bad0;
+  --el-text-color-placeholder: #8ba0b8;
+  --el-text-color-disabled: #7c90a8;
+  --el-disabled-text-color: #7c90a8;
+  --el-fill-color: #1c2f4a;
+  --el-fill-color-extra-light: #142135;
+  --el-fill-color-darker: #16253b;
+  --el-bg-color-page: #0d1626;
   --el-mask-color: rgba(2, 6, 23, .68);
+  --el-mask-color-extra-light: rgba(2, 6, 23, .38);
+  /* Element Plus 的浅色阶梯默认按白色混色生成，深色主题下会让标签、朴素按钮和提示块出现接近纯白的底色；
+     这里改为与深色表面混色，只把语义色留在文字和细边框上。 */
+  --el-color-primary-light-3: color-mix(in srgb, var(--el-color-primary) 70%, var(--bg-panel));
+  --el-color-primary-light-5: color-mix(in srgb, var(--el-color-primary) 50%, var(--bg-panel));
+  --el-color-primary-light-7: color-mix(in srgb, var(--el-color-primary) 30%, var(--bg-panel));
+  --el-color-primary-light-8: color-mix(in srgb, var(--el-color-primary) 20%, var(--bg-panel));
+  --el-color-primary-light-9: color-mix(in srgb, var(--el-color-primary) 12%, var(--bg-panel));
+  --el-color-success-light-3: color-mix(in srgb, var(--el-color-success) 70%, var(--bg-panel));
+  --el-color-success-light-5: color-mix(in srgb, var(--el-color-success) 50%, var(--bg-panel));
+  --el-color-success-light-7: color-mix(in srgb, var(--el-color-success) 30%, var(--bg-panel));
+  --el-color-success-light-8: color-mix(in srgb, var(--el-color-success) 20%, var(--bg-panel));
+  --el-color-success-light-9: color-mix(in srgb, var(--el-color-success) 12%, var(--bg-panel));
+  --el-color-warning-light-3: color-mix(in srgb, var(--el-color-warning) 70%, var(--bg-panel));
+  --el-color-warning-light-5: color-mix(in srgb, var(--el-color-warning) 50%, var(--bg-panel));
+  --el-color-warning-light-7: color-mix(in srgb, var(--el-color-warning) 30%, var(--bg-panel));
+  --el-color-warning-light-8: color-mix(in srgb, var(--el-color-warning) 20%, var(--bg-panel));
+  --el-color-warning-light-9: color-mix(in srgb, var(--el-color-warning) 12%, var(--bg-panel));
+  --el-color-danger-light-3: color-mix(in srgb, var(--el-color-danger) 70%, var(--bg-panel));
+  --el-color-danger-light-5: color-mix(in srgb, var(--el-color-danger) 50%, var(--bg-panel));
+  --el-color-danger-light-7: color-mix(in srgb, var(--el-color-danger) 30%, var(--bg-panel));
+  --el-color-danger-light-8: color-mix(in srgb, var(--el-color-danger) 20%, var(--bg-panel));
+  --el-color-danger-light-9: color-mix(in srgb, var(--el-color-danger) 12%, var(--bg-panel));
+  --el-color-error-light-3: var(--el-color-danger-light-3);
+  --el-color-error-light-5: var(--el-color-danger-light-5);
+  --el-color-error-light-7: var(--el-color-danger-light-7);
+  --el-color-error-light-8: var(--el-color-danger-light-8);
+  --el-color-error-light-9: var(--el-color-danger-light-9);
+  --el-color-info-light-3: color-mix(in srgb, var(--el-color-info) 70%, var(--bg-panel));
+  --el-color-info-light-5: color-mix(in srgb, var(--el-color-info) 50%, var(--bg-panel));
+  --el-color-info-light-7: color-mix(in srgb, var(--el-color-info) 30%, var(--bg-panel));
+  --el-color-info-light-8: color-mix(in srgb, var(--el-color-info) 20%, var(--bg-panel));
+  --el-color-info-light-9: color-mix(in srgb, var(--el-color-info) 12%, var(--bg-panel));
 }
 
 * {
@@ -626,6 +671,12 @@ a {
   border-color: var(--blue) !important;
   color: var(--blue) !important;
   background: var(--blue-deep) !important;
+}
+
+/* 深色主题的主按钮原来用浅蓝填充配白字，面积一大就既刺眼又难读，改用中蓝填充。 */
+:root[data-theme='dark'] .el-button--primary:not(.is-disabled) {
+  border-color: #2563eb;
+  background: #2563eb;
 }
 
 :root[data-theme='dark'] .theme-toggle,
