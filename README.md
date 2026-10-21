@@ -13,6 +13,8 @@ AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查�
 项目面向单台 macOS 或 Windows 电脑，数据库凭据、SSH 密码和私钥由网关保管，避免每次
 与 AI 对话时重复粘贴认证信息。
 
+使用、修改或二次开发本项目前，请阅读[免责声明](#免责声明)。
+
 ## What it does
 
 - 本机免登录：打开网页直接进入控制台，使用固定的本地管理员身份；MCP 仍使用独立的作用域令牌。
@@ -325,6 +327,21 @@ responsible vulnerability reporting.
 AI tools may be used to propose code or documentation, but every change must be reviewed by a
 human, tested locally, and checked for credential leakage and SQL-policy regressions before it
 is merged.
+
+## 免责声明
+
+本项目按“现状”提供，不就其适销性、特定用途适用性、非侵权性或持续可用性作出任何明示或暗示担保。
+查询模式、权限控制和审计等功能不构成对操作安全、数据完整性或运行结果的保证。
+
+使用者应自行评估本项目及其衍生版本是否适用于实际环境，并负责必要的测试、数据备份与恢复准备、
+权限配置和操作确认。使用者应仅在获得合法授权的数据库和服务器上使用本项目。
+
+对于因使用本项目，或基于本项目进行修改、二次开发、集成、部署、分发及使用相关衍生版本而产生
+或与之相关的数据库数据丢失、损坏、泄露、服务器故障、业务中断、经济损失等，在适用法律允许的
+最大范围内，相关风险和损失由使用者自行承担，项目作者、版权持有人及贡献者不承担相应赔偿责任。
+
+本声明是对 [MIT 许可证](LICENSE) 中无担保及责任限制条款的说明，不改变许可证的授权范围，
+也不排除或限制适用法律不得排除或限制的责任。
 
 ## License
 
