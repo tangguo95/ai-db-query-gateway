@@ -179,6 +179,7 @@ export interface AccessTokenSummary {
   name: string
   dataSourceIds?: string[]
   serverIds?: string[]
+  clusterIds?: string[]
   createdAt?: string
   expiresAt?: string
   lastUsedAt?: string
@@ -238,4 +239,27 @@ export interface ServerResult {
   truncated: boolean
   durationMs: number
   message: string
+}
+
+export interface KubernetesCluster {
+  id: string
+  name: string
+  context: string
+  namespaces: string[]
+  allowContainerQuery: boolean
+  enabled: boolean
+  updatedAt: string
+}
+export interface KubernetesSave {
+  name: string
+  kubeconfig: string
+  context: string
+  namespaces: string[]
+  allowContainerQuery: boolean
+}
+export interface KubernetesResult {
+  format: string
+  content: string
+  continueToken: string
+  durationMs: number
 }

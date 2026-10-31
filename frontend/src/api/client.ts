@@ -1,4 +1,7 @@
 import type {
+  KubernetesCluster,
+  KubernetesSave,
+  KubernetesResult,
   ServerSummary,
   ServerConnection,
   ServerResult,
@@ -257,6 +260,12 @@ export function errorMessage(error: unknown): string {
 }
 
 export const api = {
+  kubernetesClusters: () => request<KubernetesCluster[]>('/api/kubernetes'),
+  kubernetesResourceTypes: () => request<string[]>('/api/kubernetes/resource-types'),
+  testKubernetes: (id: string | null, body: KubernetesSave) => request<void>(id ? `/api/kubernetes/${encodeURIComponent(id)}/test` : '/api/kubernetes/test', { method: 'POST', body: JSON.stringify(body) }),
+  saveKubernetes: (id: string | null, body: KubernetesSave) => request<KubernetesCluster>(id ? `/api/kubernetes/${encodeURIComponent(id)}` : '/api/kubernetes', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) }),
+  deleteKubernetes: (id: string) => request<void>(`/api/kubernetes/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  queryKubernetes: (action: 'resources' | 'logs' | 'container', body: Record<string, unknown>) => request<KubernetesResult>(`/api/kubernetes/${action}`, { method: 'POST', body: JSON.stringify(body) }),
   servers: () => request<ServerSummary[]>('/api/servers'),
   serverConnection: (id: string) => request<ServerConnection>(`/api/servers/${encodeURIComponent(id)}/connection`),
   saveServer: (id: string | null, body: { name: string; connection: ServerConnection }) =>
@@ -431,6 +440,7 @@ export const api = {
     name: string
     dataSourceIds: string[]
     serverIds?: string[]
+    clusterIds?: string[]
     expiresInDays: number
     rawDataAcknowledged: boolean
   }) => request<AccessTokenSummary>('/api/tokens', {
@@ -439,18 +449,20 @@ export const api = {
       name: body.name,
       dataSourceIds: body.dataSourceIds,
       serverIds: body.serverIds,
+      clusterIds: body.clusterIds,
       expiresInDays: body.expiresInDays,
       confirmCloudDataRisk: body.rawDataAcknowledged
     })
   }),
   updateTokenScope: (
     id: string,
-    body: { dataSourceIds: string[]; serverIds?: string[]; rawDataAcknowledged: boolean }
+    body: { dataSourceIds: string[]; serverIds?: string[]; clusterIds?: string[]; rawDataAcknowledged: boolean }
   ) => request<AccessTokenSummary>(`/api/tokens/${encodeURIComponent(id)}/scope`, {
     method: 'PUT',
     body: JSON.stringify({
       dataSourceIds: body.dataSourceIds,
       serverIds: body.serverIds,
+      clusterIds: body.clusterIds,
       confirmCloudDataRisk: body.rawDataAcknowledged
     })
   }),

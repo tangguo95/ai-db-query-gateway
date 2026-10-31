@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, errorMessage, normalizeList } from '../api/client'
-import type { AccessTokenSummary, DataSourceSummary, ServerSummary } from '../api/types'
+import type { AccessTokenSummary, DataSourceSummary, ServerSummary, KubernetesCluster } from '../api/types'
 import LoadState from '../components/LoadState.vue'
 import StateChip from '../components/StateChip.vue'
 
@@ -11,6 +11,7 @@ const error = ref('')
 const tokens = ref<AccessTokenSummary[]>([])
 const dataSources = ref<DataSourceSummary[]>([])
 const servers = ref<ServerSummary[]>([])
+const clusters = ref<KubernetesCluster[]>([])
 const createOpen = ref(false)
 const createdOpen = ref(false)
 const scopeOpen = ref(false)
@@ -24,6 +25,7 @@ const form = reactive({
   name: '',
   dataSourceIds: [] as string[],
   serverIds: [] as string[],
+  clusterIds: [] as string[],
   expiresInDays: 30,
   rawDataAcknowledged: false
 })
@@ -31,6 +33,7 @@ const form = reactive({
 const scopeForm = reactive({
   dataSourceIds: [] as string[],
   serverIds: [] as string[],
+  clusterIds: [] as string[],
   rawDataAcknowledged: false
 })
 
@@ -42,7 +45,8 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [tokenPayload, sourcePayload, serverPayload] = await Promise.all([api.tokens(), api.dataSources(), api.servers()])
+    const [tokenPayload, sourcePayload, serverPayload, clusterPayload] = await Promise.all([api.tokens(), api.dataSources(), api.servers(), api.kubernetesClusters()])
+    clusters.value = clusterPayload
     servers.value = serverPayload
     tokens.value = normalizeList(tokenPayload).items
     dataSources.value = normalizeList(sourcePayload).items
@@ -58,6 +62,7 @@ function openCreate() {
     name: '',
     dataSourceIds: [],
     serverIds: [],
+    clusterIds: [],
     expiresInDays: 30,
     rawDataAcknowledged: false
   })
@@ -66,8 +71,18 @@ function openCreate() {
 
 function openScopeEditor(token: AccessTokenSummary) {
   editingToken.value = token
-  scopeForm.dataSourceIds = [...(token.dataSourceIds ?? [])]
-  scopeForm.serverIds = [...(token.serverIds ?? [])]
+  const sourceIds = new Set(dataSources.value.map((source) => source.id))
+  const serverIds = new Set(servers.value.map((server) => server.id))
+  const clusterIds = new Set(clusters.value.map((cluster) => cluster.id))
+  // 列表不展示已删除资源，编辑草稿不能继续携带其旧 ID；确认保存后才更新实际授权。
+  scopeForm.dataSourceIds = (token.dataSourceIds ?? []).filter((id) => sourceIds.has(id))
+  scopeForm.serverIds = (token.serverIds ?? []).filter((id) => serverIds.has(id))
+  scopeForm.clusterIds = (token.clusterIds ?? []).filter((id) => clusterIds.has(id))
+  const removedCount = (token.dataSourceIds?.length ?? 0) + (token.serverIds?.length ?? 0) + (token.clusterIds?.length ?? 0)
+    - scopeForm.dataSourceIds.length - scopeForm.serverIds.length - scopeForm.clusterIds.length
+  if (removedCount > 0) {
+    ElMessage.warning(`已从本次编辑中移除 ${removedCount} 个已删除或不存在的资源，确认保存后才会更新令牌授权`)
+  }
   scopeForm.rawDataAcknowledged = false
   scopeOpen.value = true
 }
@@ -77,8 +92,8 @@ async function create() {
     ElMessage.warning('请填写令牌用途名称')
     return
   }
-  if (!form.dataSourceIds.length && !form.serverIds.length) {
-    ElMessage.warning('至少选择一个允许访问的数据源或服务器')
+  if (!form.dataSourceIds.length && !form.serverIds.length && !form.clusterIds.length) {
+    ElMessage.warning('至少选择一个允许访问的数据源、服务器或 Kubernetes 集群')
     return
   }
   if (!form.rawDataAcknowledged) {
@@ -92,6 +107,7 @@ async function create() {
       name: form.name.trim(),
       dataSourceIds: form.dataSourceIds,
       serverIds: form.serverIds,
+      clusterIds: form.clusterIds,
       expiresInDays: form.expiresInDays,
       rawDataAcknowledged: true
     })
@@ -119,8 +135,8 @@ async function copyToken() {
 async function updateScope() {
   const token = editingToken.value
   if (!token) return
-  if (!scopeForm.dataSourceIds.length && !scopeForm.serverIds.length) {
-    ElMessage.warning('至少保留一个允许访问的数据源或服务器')
+  if (!scopeForm.dataSourceIds.length && !scopeForm.serverIds.length && !scopeForm.clusterIds.length) {
+    ElMessage.warning('至少保留一个允许访问的数据源、服务器或 Kubernetes 集群')
     return
   }
   if (!scopeForm.rawDataAcknowledged) {
@@ -130,7 +146,8 @@ async function updateScope() {
   const previous = new Set(token.dataSourceIds ?? [])
   const next = new Set(scopeForm.dataSourceIds)
   if (previous.size === next.size && [...previous].every((id) => next.has(id))
-      && JSON.stringify([...(token.serverIds ?? [])].sort()) === JSON.stringify([...scopeForm.serverIds].sort())) {
+      && JSON.stringify([...(token.serverIds ?? [])].sort()) === JSON.stringify([...scopeForm.serverIds].sort())
+      && JSON.stringify([...(token.clusterIds ?? [])].sort()) === JSON.stringify([...scopeForm.clusterIds].sort())) {
     ElMessage.info('资源范围没有变化')
     return
   }
@@ -154,6 +171,7 @@ async function updateScope() {
     await api.updateTokenScope(token.id, {
       dataSourceIds: scopeForm.dataSourceIds,
       serverIds: scopeForm.serverIds,
+      clusterIds: scopeForm.clusterIds,
       rawDataAcknowledged: true
     })
     ElMessage.success('令牌资源范围已更新，MCP 无需重新配置')
@@ -232,7 +250,7 @@ onMounted(load)
 
     <div class="token-warning">
       <div class="warning-mark">原始数据</div>
-      <p><strong>查询结果不脱敏。</strong>令牌持有的 AI 客户端可能把生产数据发送到云端模型。只授予解决当前问题所需的数据源和服务器。</p>
+      <p><strong>查询结果不脱敏。</strong>令牌持有的 AI 客户端可能把生产数据发送到云端模型。只授予解决当前问题所需的数据源、服务器和集群。</p>
       <span>每个令牌每分钟 30 次请求</span>
     </div>
 
@@ -269,6 +287,7 @@ onMounted(load)
                 <StateChip :value="tokenStatus(token)" />
               </header>
               <p>{{ sourceNames(token.dataSourceIds) }}</p>
+              <p v-if="token.clusterIds?.length">Kubernetes：{{ token.clusterIds.map(id => clusters.find(c => c.id === id)?.name ?? id).join(' · ') }}</p>
               <p v-if="token.serverIds?.length">服务器：{{ token.serverIds.map(id => servers.find(s => s.id === id)?.name ?? id).join(' · ') }}</p>
               <dl>
                 <div>
@@ -341,6 +360,11 @@ onMounted(load)
               :label="`${server.name} · ${server.fullAccess ? '完整权限' : '查询模式'}`" />
           </el-select>
         </el-form-item>
+        <el-form-item label="允许访问的 Kubernetes 集群">
+          <el-select v-model="form.clusterIds" multiple style="width: 100%" placeholder="可只选择集群">
+            <el-option v-for="cluster in clusters.filter(c => c.enabled)" :key="cluster.id" :value="cluster.id" :label="cluster.name" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="有效天数">
           <el-input-number v-model="form.expiresInDays" :min="1" :max="365" controls-position="right" style="width: 100%" />
         </el-form-item>
@@ -349,7 +373,7 @@ onMounted(load)
           <el-checkbox v-model="form.rawDataAcknowledged" />
           <span>
             <strong>我确认原始数据传输风险</strong>
-            查询结果及服务器输出可能由持有此令牌的客户端发送给云端 AI；我已按最小范围选择数据源和服务器。
+            查询结果、服务器输出及 Kubernetes 资源可能由持有此令牌的客户端发送给云端 AI；我已按最小范围选择数据源、服务器和集群。
           </span>
         </label>
       </el-form>
@@ -367,7 +391,7 @@ onMounted(load)
     >
       <div class="scope-preservation">
         <strong>原 Token 保持不变</strong>
-        <p>这里只更新数据源和服务器授权范围，不修改令牌内容、有效期或 MCP 配置。</p>
+        <p>这里只更新数据源、服务器和 Kubernetes 授权范围，不修改令牌内容、有效期或 MCP 配置。</p>
       </div>
       <el-form v-if="editingToken" label-position="top">
         <el-form-item label="令牌">
@@ -387,21 +411,27 @@ onMounted(load)
               :key="source.id"
               :label="`${source.name} · ${source.enabled && source.readOnlyStatus !== 'BLOCKED' ? '可用' : '不可用，请移除'}`"
               :value="source.id"
-              :disabled="!source.enabled || source.readOnlyStatus === 'BLOCKED'"
+              :disabled="(!source.enabled || source.readOnlyStatus === 'BLOCKED') && !scopeForm.dataSourceIds.includes(source.id)"
             />
           </el-select>
         </el-form-item>
         <el-form-item label="允许访问的服务器">
           <el-select v-model="scopeForm.serverIds" multiple style="width: 100%" placeholder="可只选择服务器">
-            <el-option v-for="server in servers" :key="server.id" :value="server.id" :disabled="!server.enabled"
+            <el-option v-for="server in servers" :key="server.id" :value="server.id" :disabled="!server.enabled && !scopeForm.serverIds.includes(server.id)"
               :label="`${server.name} · ${!server.enabled ? '不可用，请移除' : server.fullAccess ? '完整权限' : '查询模式'}`" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="允许访问的 Kubernetes 集群">
+          <el-select v-model="scopeForm.clusterIds" multiple style="width: 100%" placeholder="可只选择集群">
+            <el-option v-for="cluster in clusters" :key="cluster.id" :value="cluster.id"
+              :disabled="!cluster.enabled && !scopeForm.clusterIds.includes(cluster.id)" :label="`${cluster.name} · ${cluster.enabled ? '只读查询' : '不可用，请移除'}`" />
           </el-select>
         </el-form-item>
         <label class="risk-confirm" :class="{ checked: scopeForm.rawDataAcknowledged }">
           <el-checkbox v-model="scopeForm.rawDataAcknowledged" />
           <span>
             <strong>我确认扩大后的原始数据访问风险</strong>
-            查询结果及服务器输出可能由持有此令牌的客户端发送给云端 AI；当前选择仍符合最小必要范围。
+            查询结果、服务器输出及 Kubernetes 资源可能由持有此令牌的客户端发送给云端 AI；当前选择仍符合最小必要范围。
           </span>
         </label>
       </el-form>

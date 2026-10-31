@@ -172,9 +172,13 @@ public final class ApiDtos {
             @Min(1) @Max(365) Integer expiresInDays,
             @AssertTrue(message = "必须明确确认结果可能发送给云端 AI")
                     @JsonProperty("confirmCloudDataRisk") boolean confirmCloudDataRisk,
-            @Size(max = 100) List<@NotBlank @Size(max = 64) String> serverIds) {
+            @Size(max = 100) List<@NotBlank @Size(max = 64) String> serverIds,
+            @Size(max = 100) List<@NotBlank @Size(max = 64) String> clusterIds) {
+        public TokenCreateRequest(String name, List<String> dataSourceIds, Integer expiresInDays, boolean confirmed, List<String> serverIds) {
+            this(name, dataSourceIds, expiresInDays, confirmed, serverIds, null);
+        }
         public TokenCreateRequest(String name, List<String> dataSourceIds, Integer expiresInDays, boolean confirmed) {
-            this(name, dataSourceIds, expiresInDays, confirmed, null);
+            this(name, dataSourceIds, expiresInDays, confirmed, null, null);
         }
     }
 
@@ -182,9 +186,13 @@ public final class ApiDtos {
             @NotNull @Size(max = 100) List<@NotBlank @Size(max = 64) String> dataSourceIds,
             @AssertTrue(message = "必须明确确认结果可能发送给云端 AI")
                     @JsonProperty("confirmCloudDataRisk") boolean confirmCloudDataRisk,
-            @Size(max = 100) List<@NotBlank @Size(max = 64) String> serverIds) {
+            @Size(max = 100) List<@NotBlank @Size(max = 64) String> serverIds,
+            @Size(max = 100) List<@NotBlank @Size(max = 64) String> clusterIds) {
+        public TokenScopeUpdateRequest(List<String> dataSourceIds, boolean confirmed, List<String> serverIds) {
+            this(dataSourceIds, confirmed, serverIds, null);
+        }
         public TokenScopeUpdateRequest(List<String> dataSourceIds, boolean confirmed) {
-            this(dataSourceIds, confirmed, null);
+            this(dataSourceIds, confirmed, null, null);
         }
     }
 
@@ -196,6 +204,11 @@ public final class ApiDtos {
             List<String> permissions,
             Instant expiresAt,
             Instant createdAt) {
+        @JsonProperty("clusterIds")
+        public List<String> clusterIds() {
+            return permissions.stream().filter(p -> p.startsWith("kubernetes:read:"))
+                    .map(p -> p.substring("kubernetes:read:".length())).toList();
+        }
         @JsonProperty("serverIds")
         public List<String> serverIds() {
             return permissions.stream().filter(p -> p.startsWith("server:execute:"))
@@ -211,6 +224,11 @@ public final class ApiDtos {
             Instant expiresAt,
             Instant lastUsedAt,
             Instant createdAt) {
+        @JsonProperty("clusterIds")
+        public List<String> clusterIds() {
+            return permissions.stream().filter(p -> p.startsWith("kubernetes:read:"))
+                    .map(p -> p.substring("kubernetes:read:".length())).toList();
+        }
         @JsonProperty("serverIds")
         public List<String> serverIds() {
             return permissions.stream().filter(p -> p.startsWith("server:execute:"))

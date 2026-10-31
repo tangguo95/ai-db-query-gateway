@@ -6,9 +6,9 @@
 
 [中文说明](README_ZH.md)
 
-AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查询与 Linux 服务器管理网关。
+AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查询、Linux 服务器管理与 Kubernetes 只读查询网关。
 数据库侧支持 MySQL、DRDS 和 OceanBase 只读查询；服务器侧支持通过 SSH 执行受控命令。
-网页管理连接与授权，本地 MCP STDIO 适配器提供八个数据库工具和两个服务器工具。
+网页管理连接与授权，本地 MCP STDIO 适配器提供八个数据库工具、两个服务器工具和四个 Kubernetes 工具。
 
 项目面向单台 macOS 或 Windows 电脑，数据库凭据、SSH 密码和私钥由网关保管，避免每次
 与 AI 对话时重复粘贴认证信息。
@@ -24,7 +24,7 @@ AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查�
   rather than plaintext credentials.
 - Lets an administrator manage data sources, approvals, scoped API tokens, and audit events
   from the web console.
-- MCP 提供八个数据库工具，以及 `list_servers`、`execute_server_command` 两个服务器工具。
+- MCP 提供八个数据库工具、两个服务器工具和四个 Kubernetes 只读工具。
   服务器支持直连或单级 SSH 跳板机，密码或私钥认证；默认查询模式，管理员可开启完整权限。
   使用方法见 [Linux 服务器管理](README_ZH.md#linux-服务器管理)。
 - MCP 不暴露保存的连接信息、认证材料、Keychain 引用或管理接口；远程命令输出由 SSH 账号的可访问范围决定。
@@ -89,6 +89,30 @@ AI 可以通过 MCP 自行编写并执行 Linux 命令，无需预设运维操�
 
 升级后需重启网关并重新连接 MCP，以加载新增工具。详细参数与状态语义见 [MCP 文档](docs/mcp.md#linux-服务器命令)。
 
+## Kubernetes 只读查询
+
+网页“Kubernetes”可导入 kubeconfig 文件或粘贴内容，选择 context，并填写允许查询的命名空间
+（逗号分隔；`*` 表示全部）。测试连接后保存，再在“访问令牌”中勾选集群；旧令牌不会自动获得集群权限。
+同一个 MCP 服务新增 `list_kubernetes_clusters`、`get_kubernetes_resources`、
+`get_kubernetes_pod_logs`、`query_kubernetes_container` 四个工具。
+
+- 支持 Pod、Deployment、StatefulSet、DaemonSet、Service、ConfigMap、Ingress、Job、PVC、事件等常见资源的 YAML；列表默认 50 条，最多 100 条，使用返回的继续标识手动翻页。
+- Pod 日志通过只读日志 API 获取，无需进入容器；默认最近 1 小时、500 行，最多 24 小时、2000 行和 256 KiB，不持续跟随。
+- 容器内查询默认关闭，可在集群配置中单独开启。采用单次非交互 exec，只接受 `ls`、`cat`、`head`、`tail`、`ps`、`df`、`id`、`uname`、`pwd` 的有限参数，命令按参数数组传递，不经 Shell。读取文件要求绝对路径，不开放 `/dev`、`/proc`、`/sys`。
+- 不提供 apply、delete、patch、扩缩容、重启、复制文件、交互式终端、代理或任意 API 路径。当前资源列表不包含 Secret 和自定义资源（CRD），也没有完整权限开关。
+- 仅支持 HTTPS 及 kubeconfig 中的内嵌 Token/客户端证书认证；不执行 `exec`、`auth-provider` 插件，不读取本机证书或 Token 文件，不使用代理配置。规范化后的配置上限 24 KiB，只保留选定 context，修改其他 context 时需重新导入。
+
+需在运行网关的电脑上已有与目标集群兼容的 `kubectl`。默认查找 Docker Desktop、Homebrew 和
+PATH 中的客户端；也可通过 `--gateway.kubernetes.kubectl-path=/absolute/path/to/kubectl` 指定。
+凭据持久化在 Keychain/DPAPI，调用时使用仅当前用户可读的临时文件，并在调用结束后清理。
+执行用途、目标和参数进入审计，查询结果不持久化；资源 YAML 和日志本身仍可能包含敏感信息。
+
+网关同时限制集群授权、命名空间、每集群每秒一次查询、单集群并发 1、全局并发 2、最长 20 秒等待及
+1 MiB 输出，不自动重试。超时会结束本机 kubectl，但无法保证已创建的容器进程停止。
+推荐使用仅有必要 get/list 及 pods/log 权限的 kubeconfig；容器 exec 需要额外授权。
+Kubernetes 的 exec 权限不能限制具体命令，因此容器内只读属于网关的应用层限制，依赖容器中工具的行为，
+不保证绝对无副作用，也不保证平台不会记录或触发告警。详见 [Kubernetes RBAC 文档](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)。
+
 ## 数据库只读边界
 
 The gateway deliberately does **not** inspect database account privileges. A successful
@@ -109,7 +133,8 @@ AI client ── STDIO ── MCP ── token ──> Spring Boot gateway
                                       ├─ SQLite control plane and chained HMAC audit
                                       ├─ macOS Keychain / Windows DPAPI secret references
                                       ├─ bounded JDBC pools ──> MySQL / DRDS / OceanBase
-                                      └─ SSH 命令执行 ──> Linux（直连 / 单级跳板机）
+                                      ├─ SSH 命令执行 ──> Linux（直连 / 单级跳板机）
+                                  └─ kubectl 只读查询 / 受限 exec ──> Kubernetes
 ```
 
 服务默认监听 `127.0.0.1:8765`，不是数据库 TCP 代理，也不提供远程 HTTP MCP。

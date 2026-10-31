@@ -10,6 +10,10 @@ public record TokenContext(
         Set<String> permissions,
         Instant expiresAt) {
 
+    public boolean permitsKubernetes(String clusterId) {
+        return permissions.contains("kubernetes:read:" + clusterId);
+    }
+
     public boolean permitsServer(String serverId) {
         return permissions.contains("server:execute:" + serverId);
     }

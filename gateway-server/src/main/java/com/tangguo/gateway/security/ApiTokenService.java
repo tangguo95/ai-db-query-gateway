@@ -52,10 +52,11 @@ public class ApiTokenService {
                 ActorType.ADMIN,
                 "TOKEN_CREATE_REQUESTED",
                 "REQUESTED",
-                java.util.Map.of("name", request.name(), "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds())));
+                java.util.Map.of("name", request.name(), "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds(), "clusterIds", request.clusterIds() == null ? List.of() : request.clusterIds())));
         List<String> serverIds = request.serverIds() == null ? List.of() : request.serverIds().stream().distinct().toList();
-        validateResourceScope(request.dataSourceIds(), serverIds);
-        List<String> permissions = permissions(DEFAULT_PERMISSIONS, serverIds);
+        List<String> clusterIds = request.clusterIds() == null ? List.of() : request.clusterIds().stream().distinct().toList();
+        validateResourceScope(request.dataSourceIds(), serverIds, clusterIds);
+        List<String> permissions = permissions(DEFAULT_PERMISSIONS, serverIds, clusterIds);
         String id = UUID.randomUUID().toString();
         byte[] random = new byte[32];
         new SecureRandom().nextBytes(random);
@@ -85,7 +86,7 @@ public class ApiTokenService {
                 ActorType.ADMIN,
                 "TOKEN_CREATED",
                 "SUCCESS",
-                java.util.Map.of("tokenId", id, "name", request.name(), "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds())));
+                java.util.Map.of("tokenId", id, "name", request.name(), "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds(), "clusterIds", request.clusterIds() == null ? List.of() : request.clusterIds())));
         return new TokenCreated(
                 id, request.name(), rawToken, request.dataSourceIds(), permissions, expiresAt, now);
     }
@@ -115,7 +116,7 @@ public class ApiTokenService {
                 ActorType.ADMIN,
                 "TOKEN_SCOPE_UPDATE_REQUESTED",
                 "REQUESTED",
-                java.util.Map.of("tokenId", id, "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds())));
+                java.util.Map.of("tokenId", id, "dataSourceIds", request.dataSourceIds(), "serverIds", request.serverIds() == null ? List.of() : request.serverIds(), "clusterIds", request.clusterIds() == null ? List.of() : request.clusterIds())));
         TokenView current = findToken(id);
         if (!current.expiresAt().isAfter(Instant.now())) {
             throw new GatewayException(
@@ -132,12 +133,13 @@ public class ApiTokenService {
         List<String> dataSourceIds = request.dataSourceIds().stream().distinct().toList();
         // 老客户端不传服务器范围时保留已有授权；显式空数组表示撤销服务器授权。
         List<String> serverIds = request.serverIds() == null ? current.serverIds() : request.serverIds().stream().distinct().toList();
-        validateResourceScope(dataSourceIds, serverIds);
+        List<String> clusterIds = request.clusterIds() == null ? current.clusterIds() : request.clusterIds().stream().distinct().toList();
+        validateResourceScope(dataSourceIds, serverIds, clusterIds);
         try {
             int changed = jdbcTemplate.update(
                     "UPDATE api_token SET data_source_scope = ?, permissions = ? WHERE id = ?",
                     objectMapper.writeValueAsString(dataSourceIds),
-                    objectMapper.writeValueAsString(permissions(current.permissions(), serverIds)),
+                    objectMapper.writeValueAsString(permissions(current.permissions(), serverIds, clusterIds)),
                     id);
             if (changed == 0) {
                 throw new GatewayException(HttpStatus.NOT_FOUND, "TOKEN_NOT_FOUND", "访问令牌不存在");
@@ -157,7 +159,7 @@ public class ApiTokenService {
                         current.dataSourceIds(),
                         "dataSourceIds",
                         dataSourceIds,
-                        "serverIds", serverIds)));
+                        "serverIds", serverIds, "clusterIds", clusterIds)));
         return findToken(id);
     }
 
@@ -218,15 +220,20 @@ public class ApiTokenService {
         }
     }
 
-    private List<String> permissions(List<String> existing, List<String> serverIds) {
-        var permissions = new java.util.ArrayList<>(existing.stream().filter(p -> !p.startsWith("server:execute:")).toList());
+    private List<String> permissions(List<String> existing, List<String> serverIds, List<String> clusterIds) {
+        var permissions = new java.util.ArrayList<>(existing.stream().filter(p -> !p.startsWith("server:execute:") && !p.startsWith("kubernetes:read:")).toList());
         serverIds.forEach(id -> permissions.add("server:execute:" + id));
+        clusterIds.forEach(id -> permissions.add("kubernetes:read:" + id));
         return List.copyOf(permissions);
     }
 
-    private void validateResourceScope(List<String> dataSourceIds, List<String> serverIds) {
-        if (dataSourceIds.isEmpty() && serverIds.isEmpty()) {
-            throw new GatewayException(HttpStatus.BAD_REQUEST, "EMPTY_TOKEN_SCOPE", "至少选择一个数据源或服务器");
+    private void validateResourceScope(List<String> dataSourceIds, List<String> serverIds, List<String> clusterIds) {
+        if (dataSourceIds.isEmpty() && serverIds.isEmpty() && clusterIds.isEmpty()) {
+            throw new GatewayException(HttpStatus.BAD_REQUEST, "EMPTY_TOKEN_SCOPE", "至少选择一个数据源、服务器或 Kubernetes 集群");
+        }
+        for (String id : clusterIds) {
+            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM kubernetes_config WHERE id=? AND enabled=1", Integer.class, id);
+            if (count == null || count == 0) throw new GatewayException(HttpStatus.BAD_REQUEST, "KUBERNETES_NOT_AVAILABLE", "令牌只能绑定已通过连接测试的集群");
         }
         validateDataSourceScope(dataSourceIds);
         for (String id : serverIds) {

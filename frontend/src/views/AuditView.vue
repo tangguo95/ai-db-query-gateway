@@ -36,6 +36,16 @@ const filters = reactive({
 })
 
 const eventLabels: Record<string, string> = {
+  KUBERNETES_TEST_REQUESTED: '测试 Kubernetes 连接',
+  KUBERNETES_TESTED: 'Kubernetes 连接测试完成',
+  KUBERNETES_SAVE_REQUESTED: '申请保存集群配置',
+  KUBERNETES_SAVED: '保存集群配置',
+  KUBERNETES_DELETE_REQUESTED: '申请删除集群配置',
+  KUBERNETES_DELETED: '删除集群配置',
+  KUBERNETES_QUERY_REQUESTED: '发起 Kubernetes 查询',
+  KUBERNETES_QUERY_FINISHED: 'Kubernetes 查询完成',
+  KUBERNETES_QUERY_FAILED: 'Kubernetes 查询失败',
+
   SERVER_DELETE_REQUESTED: '申请删除服务器配置',
   SERVER_DELETED: '删除服务器配置',
   SERVER_SAVE_REQUESTED: '申请保存服务器配置',
@@ -329,6 +339,7 @@ onMounted(load)
             <el-option label="查询事件" value="QUERY" />
             <el-option label="数据源操作" value="DATASOURCE" />
             <el-option label="服务器操作" value="SERVER" />
+            <el-option label="Kubernetes 查询" value="KUBERNETES" />
             <el-option label="访问令牌" value="TOKEN" />
             <el-option label="登录认证" value="LOGIN" />
             <el-option label="用户设置" value="ADMIN" />

@@ -1,6 +1,6 @@
 # 本地 MCP STDIO 适配器
 
-`gateway-mcp` 将八个数据库查询工具和两个服务器工具映射到本机网关 REST API。它不包含数据库驱动，
+`gateway-mcp` 将八个数据库查询工具、两个服务器工具和四个 Kubernetes 工具映射到本机网关 REST API。它不包含数据库驱动，
 不解析或放宽 SQL，也不暴露数据源管理、地址、用户名、密码、JDBC URL 和审计密钥。
 
 ## 构建与启动
@@ -38,6 +38,10 @@ AI_DB_GATEWAY_TOKEN='<scoped-token>' \
 | `cancel_query` | `POST /api/ai/queries/{queryId}/cancel` |
 | `list_servers` | `GET /api/ai/servers` |
 | `execute_server_command` | `POST /api/ai/servers/execute` |
+| `list_kubernetes_clusters` | `GET /api/ai/kubernetes` |
+| `get_kubernetes_resources` | `POST /api/ai/kubernetes/resources` |
+| `get_kubernetes_pod_logs` | `POST /api/ai/kubernetes/logs` |
+| `query_kubernetes_container` | `POST /api/ai/kubernetes/container` |
 
 所有请求都使用 `Authorization: Bearer ...`，禁止跟随 HTTP 重定向，也禁止使用系统
 HTTP 代理。路径参数会按单个 URI segment 编码，查询请求会先按工具 Schema 在服务端
@@ -113,3 +117,28 @@ stdout、stderr、耗时和状态；命令及用途进入加密审计，输出�
 `TIMED_OUT`、`OUTPUT_LIMIT`、`UNKNOWN` 或客户端取消只意味着停止等待/关闭连接，不能
 保证远程进程终止，也不回滚；客户端取消不会调用数据库取消接口。请先查询远程状态，
 不要自动重试有副作用的命令。首版不提供交互式终端、SFTP、多级跳板或动态验证码登录。
+
+## Kubernetes 调用示例
+
+先调用 `list_kubernetes_clusters` 获取授权集群、命名空间、可用资源类型及容器查询开关。
+资源列表与单个资源共用 `get_kubernetes_resources`；填写 `name` 时返回单个资源：
+
+```json
+{"clusterId":"集群 ID","resource":"deployments","namespace":"demo","name":"app","purpose":"检查应用配置"}
+```
+
+查询日志通常直接使用 `get_kubernetes_pod_logs`，不需要 exec 权限：
+
+```json
+{"clusterId":"集群 ID","namespace":"demo","pod":"app-xxx","container":"app","tailLines":200,"sinceSeconds":3600,"purpose":"排查应用异常"}
+```
+
+文件日志可在管理员开启容器查询且集群授予 exec 权限后使用 `query_kubernetes_container`：
+
+```json
+{"clusterId":"集群 ID","namespace":"demo","pod":"app-xxx","container":"app","command":["tail","-n","100","/var/log/app.log"],"purpose":"查看文件日志"}
+```
+
+这是受限命令执行，不是交互式进入容器。容器必须具有对应绝对路径工具（如 `/usr/bin/tail`），
+缺失时拒绝执行，不会安装工具、创建调试容器或回退到 Shell。配置、限制及注意事项见
+[README](../README_ZH.md#kubernetes-只读查询)。

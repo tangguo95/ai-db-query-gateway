@@ -38,6 +38,7 @@ const navigationGroups = [
     label: '资源管理',
     items: [
       { to: '/datasources', code: '02', label: '数据源', icon: 'database' },
+      { to: '/kubernetes', code: '09', label: 'Kubernetes', icon: 'database' },
       { to: '/servers', code: '08', label: 'Linux 服务器', icon: 'terminal' },
       { to: '/tokens', code: '06', label: '访问令牌', icon: 'key' }
     ]

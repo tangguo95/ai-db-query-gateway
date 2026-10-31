@@ -68,6 +68,10 @@ final class HttpGatewayClient implements GatewayClient {
         }
 
         RequestSpec requestSpec = switch (toolName) {
+            case "list_kubernetes_clusters" -> RequestSpec.get("/api/ai/kubernetes");
+            case "get_kubernetes_resources" -> RequestSpec.post("/api/ai/kubernetes/resources", arguments.deepCopy());
+            case "get_kubernetes_pod_logs" -> RequestSpec.post("/api/ai/kubernetes/logs", arguments.deepCopy());
+            case "query_kubernetes_container" -> RequestSpec.post("/api/ai/kubernetes/container", arguments.deepCopy());
             case "list_servers" -> RequestSpec.get("/api/ai/servers");
             case "execute_server_command" -> RequestSpec.post("/api/ai/servers/execute", arguments.deepCopy());
             case "list_data_sources" -> RequestSpec.get("/api/ai/data-sources");

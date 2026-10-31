@@ -29,6 +29,11 @@
 | `POST` | `/api/queries/{queryId}/approve` | 一次性批准 AI 风险查询 |
 | `POST` | `/api/queries/{queryId}/execute` | 消费批准 |
 | `POST` | `/api/queries/{queryId}/cancel` | 取消 |
+| `GET/POST` | `/api/kubernetes` | 列出/新增集群；新增会复检连接 |
+| `PUT/DELETE` | `/api/kubernetes/{id}` | 更新/删除本机集群配置 |
+| `POST` | `/api/kubernetes/test`、`/api/kubernetes/{id}/test` | 测试待保存 kubeconfig，编辑时可保留原凭据 |
+| `GET` | `/api/kubernetes/resource-types` | 支持的资源类型 |
+| `POST` | `/api/kubernetes/resources`、`/logs`、`/container` | 资源 YAML、Pod 日志或受限容器查询 |
 | `GET/POST` | `/api/tokens` | 列表/签发最小作用域 Token |
 | `PUT` | `/api/tokens/{id}/scope` | 调整有效 Token 的数据源范围，原 Token 不变 |
 | `DELETE` | `/api/tokens/{id}` | 吊销 Token |
@@ -118,3 +123,14 @@ Schema、表、风险原因、数据源只读等级、参数数量、SQL 指纹�
 
 没有任意 JDBC URL、原始 HTTP 转发、SQL 脚本批处理、写操作、导出、凭据读取、审计
 删除或 AI 数据源管理接口。
+
+## Kubernetes MCP 接口
+
+`GET /api/ai/kubernetes` 仅返回令牌授权的集群 ID、显示名称、命名空间范围、资源类型及容器查询开关。
+`POST /api/ai/kubernetes/resources`、`/logs`、`/container` 的参数见 [MCP 文档](mcp.md#kubernetes-调用示例)。
+这三个 POST 是本机网关的查询请求；资源和日志实际通过 Kubernetes GET API 查询，容器查询使用 exec。
+
+令牌创建和范围更新支持可选的 `clusterIds` 数组。旧调用方省略该字段时，创建令牌不授予集群权限，
+更新令牌则保留原集群范围；传空数组可撤销集群权限。至少需要一个数据源、服务器或集群范围。
+集群配置中的 kubeconfig 不回显；编辑时留空保留原配置。连接测试只验证 API 连通性，具体资源权限
+在查询时由 Kubernetes RBAC 校验。删除配置同时移除令牌对应授权，不操作集群内任何资源。

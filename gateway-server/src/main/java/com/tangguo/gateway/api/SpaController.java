@@ -16,6 +16,7 @@ public class SpaController {
         "/dashboard",
         "/datasources",
         "/servers",
+        "/kubernetes",
         "/workbench",
         "/approvals",
         "/audits",

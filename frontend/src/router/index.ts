@@ -10,6 +10,7 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', name: 'dashboard', component: () => import('../views/DashboardView.vue') },
+      { path: 'kubernetes', name: 'kubernetes', component: () => import('../views/KubernetesView.vue') },
       { path: 'servers', name: 'servers', component: () => import('../views/ServersView.vue') },
       { path: 'datasources', name: 'datasources', component: () => import('../views/DataSourcesView.vue') },
       { path: 'workbench', name: 'workbench', component: () => import('../views/WorkbenchView.vue') },
