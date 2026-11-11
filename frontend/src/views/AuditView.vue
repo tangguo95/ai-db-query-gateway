@@ -50,6 +50,8 @@ const eventLabels: Record<string, string> = {
   SERVER_DELETED: '删除服务器配置',
   SERVER_SAVE_REQUESTED: '申请保存服务器配置',
   SERVER_SAVED: '保存服务器配置',
+  SERVER_NOTES_CHANGE_REQUESTED: '申请修改服务器笔记',
+  SERVER_NOTES_CHANGED: '修改服务器笔记',
   SERVER_ACCESS_CHANGE_REQUESTED: '申请修改服务器权限',
   SERVER_ACCESS_CHANGED: '修改服务器权限',
   SERVER_DISABLE_REQUESTED: '申请停用服务器',

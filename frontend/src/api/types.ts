@@ -210,6 +210,7 @@ export interface ServerSummary {
   name: string
   enabled: boolean
   fullAccess: boolean
+  notes?: string
   lastTestMessage?: string
   updatedAt: string
 }

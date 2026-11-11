@@ -14,6 +14,10 @@ const saving = ref(false)
 const testingConfiguration = ref(false)
 const connectionVerified = ref(false)
 const connectionMessage = ref('')
+const notesOpen = ref(false)
+const notesServer = ref<ServerSummary | null>(null)
+const notesDraft = ref('')
+const savingNotes = ref(false)
 let formRevision = 0
 const workingId = ref('')
 const jumpEnabled = ref(false)
@@ -117,6 +121,24 @@ async function save() {
   } finally { saving.value = false }
 }
 
+function editNotes(server: ServerSummary) {
+  notesServer.value = server
+  notesDraft.value = server.notes ?? ''
+  notesOpen.value = true
+}
+
+async function saveNotes() {
+  if (!notesServer.value) return
+  savingNotes.value = true
+  try {
+    const updated = await api.saveServerNotes(notesServer.value.id, notesDraft.value)
+    servers.value = servers.value.map(server => server.id === updated.id ? updated : server)
+    notesOpen.value = false
+    ElMessage.success('使用笔记已保存，AI 下次列出服务器时即可读取')
+  } catch (cause) { ElMessage.error(errorMessage(cause)) }
+  finally { savingNotes.value = false }
+}
+
 async function remove(server: ServerSummary) {
   try {
     await ElMessageBox.confirm(
@@ -208,12 +230,14 @@ onMounted(load)
               <h2>{{ server.name }} <el-tag :type="server.enabled ? 'success' : 'info'" size="small">{{ server.enabled ? '已启用' : '未启用' }}</el-tag></h2>
               <code>{{ server.id }}</code>
               <p v-if="server.lastTestMessage" class="connection-message">{{ server.lastTestMessage }}</p>
+              <p v-if="server.notes" class="server-notes">{{ server.notes }}</p>
             </div>
             <div class="access-control">
               <span>{{ server.fullAccess ? '完整权限' : '查询模式' }}</span>
               <el-switch :model-value="server.fullAccess" :disabled="workingId === server.id" :aria-label="`${server.name}完整权限`" @change="toggleAccess(server)" />
             </div>
             <div class="server-actions">
+              <el-button :disabled="workingId === server.id" @click="editNotes(server)">使用笔记</el-button>
               <el-button :disabled="workingId === server.id" @click="edit(server)">配置</el-button>
               <el-button :loading="workingId === server.id" @click="test(server)">测试并启用</el-button>
               <el-button v-if="server.enabled" :disabled="workingId === server.id" @click="disable(server)">停用</el-button>
@@ -250,6 +274,17 @@ onMounted(load)
       </div>
     </section>
     <p class="mode-help">查询模式属于应用层限制，服务器账号仍应按需授权。文件和日志可能包含敏感数据，输出可能发送给 AI；网关不会持久化命令输出。超时或断开连接不代表远程进程已停止。</p>
+
+    <el-dialog v-model="notesOpen" :title="`${notesServer?.name ?? ''} · 使用笔记`" width="720px" :close-on-click-modal="false" :close-on-press-escape="!savingNotes" :show-close="!savingNotes">
+      <p class="mode-help">记录工程名称、日志目录和常用查看方式。已授权的 AI 可通过 MCP 读取，新的会话也能使用这些信息。</p>
+      <el-input v-model="notesDraft" type="textarea" :rows="12" maxlength="8000" show-word-limit :disabled="savingNotes" aria-label="服务器使用笔记"
+        placeholder="例如：&#10;工程：订单服务（order-service）&#10;部署目录：/opt/apps/order-service&#10;应用日志：/var/log/order-service/application.log&#10;排查异常时先查看最近 200 行；日志按日期归档。" />
+      <p class="mode-help">笔记会随服务器列表返回给 AI，请勿填写密码、私钥或 Token。笔记仅作参考，命令仍遵循服务器权限；留空保存可清除笔记。</p>
+      <template #footer>
+        <el-button :disabled="savingNotes" @click="notesOpen = false">取消</el-button>
+        <el-button type="primary" :loading="savingNotes" @click="saveNotes">保存笔记</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="editorOpen" :title="editingId ? '配置服务器' : '新增服务器'" width="720px" :close-on-click-modal="false" :close-on-press-escape="!saving && !testingConfiguration" :show-close="!saving && !testingConfiguration" @closed="clearSecrets">
       <el-form label-position="top" autocomplete="off" :disabled="saving || testingConfiguration">
@@ -293,6 +328,7 @@ onMounted(load)
 .server-info h2 { display: flex; align-items: center; gap: 12px; font-size: 16px; margin: 0 0 8px; }
 .server-info code { color: var(--text-dim); font-size: 11px; }
 .connection-message { color: var(--text-soft); font-size: 12px; overflow-wrap: anywhere; margin-bottom: 0; }
+.server-notes { color: var(--text-soft); font-size: 12px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-bottom: 0; }
 .access-control { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 13px; }
 .server-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .server-actions .el-button { margin-left: 0; }

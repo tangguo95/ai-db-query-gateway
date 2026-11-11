@@ -277,6 +277,9 @@ export const api = {
       method: 'POST', body: JSON.stringify(body)
     }),
   deleteServer: (id: string) => request<void>(`/api/servers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  saveServerNotes: (id: string, notes: string) => request<ServerSummary>(`/api/servers/${encodeURIComponent(id)}/notes`, {
+    method: 'PUT', body: JSON.stringify({ notes })
+  }),
   testServer: (id: string) => request<ServerSummary>(`/api/servers/${encodeURIComponent(id)}/test`, { method: 'POST' }),
   disableServer: (id: string) => request<ServerSummary>(`/api/servers/${encodeURIComponent(id)}/disable`, { method: 'POST' }),
   serverAccess: (id: string, fullAccess: boolean) => request<ServerSummary>(`/api/servers/${encodeURIComponent(id)}/access`, {

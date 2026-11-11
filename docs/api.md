@@ -29,6 +29,7 @@
 | `POST` | `/api/queries/{queryId}/approve` | 一次性批准 AI 风险查询 |
 | `POST` | `/api/queries/{queryId}/execute` | 消费批准 |
 | `POST` | `/api/queries/{queryId}/cancel` | 取消 |
+| `PUT` | `/api/servers/{id}/notes` | 独立更新服务器使用笔记；请求为 `{"notes":"工程名、日志目录等"}`，必填字符串，最多 8000 字，空串清除 |
 | `GET/POST` | `/api/kubernetes` | 列出/新增集群；新增会复检连接 |
 | `PUT/DELETE` | `/api/kubernetes/{id}` | 更新/删除本机集群配置 |
 | `POST` | `/api/kubernetes/test`、`/api/kubernetes/{id}/test` | 测试待保存 kubeconfig，编辑时可保留原凭据 |
@@ -65,6 +66,8 @@
 | `POST` | `/api/ai/queries/{queryId}/cancel` | `cancel_query` |
 
 AI 数据源列表只含 ID、显示名、数据库类型、只读等级和启用状态。
+`GET /api/ai/servers` 返回令牌已授权且已启用服务器的 `id`、`name`、`fullAccess` 及 `notes`。
+服务器笔记仅网页管理员可更新，保存不连接 SSH，不改变启用状态、凭据或命令权限。
 
 ## 查询契约
 

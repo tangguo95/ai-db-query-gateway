@@ -22,7 +22,7 @@ public class AiServerController {
     @GetMapping public List<Map<String, Object>> list() {
         var token = actor.requireToken();
         return service.list().stream().filter(s -> s.enabled() && token.permitsServer(s.id()))
-                .map(s -> Map.<String, Object>of("id", s.id(), "name", s.name(), "fullAccess", s.fullAccess())).toList();
+                .map(s -> Map.<String, Object>of("id", s.id(), "name", s.name(), "fullAccess", s.fullAccess(), "notes", s.notes())).toList();
     }
     @PostMapping("/execute") public ExecuteResult execute(@Valid @RequestBody ExecuteRequest request) {
         actor.requireToken();

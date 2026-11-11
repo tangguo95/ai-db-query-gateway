@@ -12,6 +12,7 @@ import com.tangguo.gateway.server.ServerDtos.Endpoint;
 import com.tangguo.gateway.server.ServerDtos.ExecuteRequest;
 import com.tangguo.gateway.server.ServerDtos.ExecuteResult;
 import com.tangguo.gateway.server.ServerDtos.SaveRequest;
+import com.tangguo.gateway.server.ServerDtos.NotesRequest;
 import com.tangguo.gateway.server.ServerDtos.ServerView;
 import java.time.Instant;
 import java.util.List;
@@ -46,7 +47,7 @@ public class ServerService {
     public List<ServerView> list() {
         return jdbc.query("SELECT * FROM server_config ORDER BY name", (rs, n) -> new ServerView(
                 rs.getString("id"), rs.getString("name"), rs.getBoolean("enabled"), rs.getBoolean("full_access"),
-                rs.getString("last_test_message"), rs.getString("updated_at")));
+                rs.getString("last_test_message"), rs.getString("updated_at"), rs.getString("notes")));
     }
 
     public ServerView get(String id) {
@@ -154,6 +155,19 @@ public class ServerService {
                     """, permission, permission);
             jdbc.update("DELETE FROM server_config WHERE id=?", id);
             event("SERVER_DELETED", "SUCCESS", Map.of("serverId", id, "serverName", server.name()));
+        } finally { busy.remove(id); }
+    }
+
+    /** 笔记只更新本机说明，不连接 SSH、不改变启用状态或命令权限。 */
+    public ServerView notes(String id, NotesRequest request) {
+        lock(id);
+        try {
+            ServerView server = get(id);
+            String notes = request.notes().strip();
+            event("SERVER_NOTES_CHANGE_REQUESTED", "REQUESTED", Map.of("serverId", id, "serverName", server.name(), "notesLength", notes.length()));
+            jdbc.update("UPDATE server_config SET notes=?, updated_at=? WHERE id=?", notes, Instant.now().toString(), id);
+            event("SERVER_NOTES_CHANGED", "SUCCESS", Map.of("serverId", id, "serverName", server.name(), "notesLength", notes.length()));
+            return get(id);
         } finally { busy.remove(id); }
     }
 

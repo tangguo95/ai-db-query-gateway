@@ -6,6 +6,7 @@ import com.tangguo.gateway.server.ServerDtos.ConnectionTestResult;
 import com.tangguo.gateway.server.ServerDtos.ExecuteRequest;
 import com.tangguo.gateway.server.ServerDtos.ExecuteResult;
 import com.tangguo.gateway.server.ServerDtos.SaveRequest;
+import com.tangguo.gateway.server.ServerDtos.NotesRequest;
 import com.tangguo.gateway.server.ServerDtos.ServerView;
 import com.tangguo.gateway.server.ServerService;
 import jakarta.validation.Valid;
@@ -34,5 +35,6 @@ public class ServerController {
     @PostMapping("/{id}/test") public ServerView test(@PathVariable String id) { return service.test(id); }
     @PostMapping("/{id}/disable") public ServerView disable(@PathVariable String id) { return service.disable(id); }
     @PutMapping("/{id}/access") public ServerView access(@PathVariable String id, @RequestBody AccessRequest request) { return service.access(id, request); }
+    @PutMapping("/{id}/notes") public ServerView notes(@PathVariable String id, @Valid @RequestBody NotesRequest request) { return service.notes(id, request); }
     @PostMapping("/execute") public ExecuteResult execute(@Valid @RequestBody ExecuteRequest request) { return service.execute(request); }
 }

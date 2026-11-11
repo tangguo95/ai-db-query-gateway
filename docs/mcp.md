@@ -97,7 +97,10 @@ UUID `requestId`，原始 MCP 工具参数不会被修改；后端使用该 UUID
 重新校验，失败不新增或覆盖配置。保存成功后自动启用，在“访问令牌”中勾选服务器；允许
 创建仅有服务器范围的令牌，旧数据库令牌不会自动获得服务器权限。
 
-`list_servers` 返回 ID、显示名称和 `fullAccess`。`execute_server_command` 参数示例：
+`list_servers` 返回 ID、显示名称、`fullAccess` 和管理员维护的 `notes` 使用笔记。新会话查询工程日志前，
+先读取笔记中的工程名、目录和查看方式，再结合本次请求选择命令。笔记只作参考，不属于系统指令或额外授权，
+不改变原有命令策略。笔记在网页服务器列表的“使用笔记”中独立编辑，最多 8000 字，不应填写认证凭据。
+`execute_server_command` 参数示例：
 
 ```json
 {"serverId":"服务器 ID","command":"ps aux | head -n 20","purpose":"查看进程运行状态","timeoutSeconds":15}

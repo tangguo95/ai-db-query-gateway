@@ -1,0 +1,1 @@
+ALTER TABLE server_config ADD COLUMN notes TEXT NOT NULL DEFAULT '';

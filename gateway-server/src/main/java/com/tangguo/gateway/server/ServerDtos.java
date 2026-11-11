@@ -31,8 +31,9 @@ public final class ServerDtos {
     public record ConnectionTestResult(boolean reachable, String message) {}
 
     public record AccessRequest(boolean fullAccess, Boolean confirmFullAccess) {}
+    public record NotesRequest(@NotNull @Size(max = 8000) String notes) {}
     public record ServerView(String id, String name, boolean enabled, boolean fullAccess,
-                             String lastTestMessage, String updatedAt) {}
+                             String lastTestMessage, String updatedAt, String notes) {}
     public record ExecuteRequest(
             @NotBlank @Size(max = 128) String serverId,
             @NotBlank @Size(max = 16384) String command,
