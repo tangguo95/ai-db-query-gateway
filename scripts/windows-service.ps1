@@ -1,10 +1,16 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('start', 'stop', 'restart', 'status')]
     [string] $Action = 'status'
 )
 
 $ErrorActionPreference = 'Stop'
+try {
+    # Windows PowerShell 5.1 默认使用 OEM 代码页；统一为 UTF-8，避免托盘读取输出时出现乱码。
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {
+    # 没有控制台句柄时忽略。
+}
 $scriptDirectory = $PSScriptRoot
 $packagedServerJar = Join-Path $scriptDirectory 'gateway-server.jar'
 $projectDirectory = if (-not [string]::IsNullOrWhiteSpace($env:GATEWAY_PROJECT_DIR)) {
@@ -45,6 +51,13 @@ function Resolve-Java21 {
     if ($null -ne $command) {
         $candidates += $command.Source
     }
+    $installed = @(
+        Get-ChildItem -Path (Join-Path $env:ProgramFiles 'Eclipse Adoptium') -Filter 'jdk-21*' -Directory -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $env:ProgramFiles 'Java') -Filter 'jdk-21*' -Directory -ErrorAction SilentlyContinue
+    )
+    foreach ($directory in $installed) {
+        $candidates += Join-Path $directory.FullName 'bin\java.exe'
+    }
     foreach ($candidate in ($candidates | Select-Object -Unique)) {
         if (Test-Path -LiteralPath $candidate) {
             $versionCommand = '"' + $candidate + '" -version 2>&1'
@@ -79,23 +92,39 @@ function Get-RecordedProcess([object] $paths) {
         Remove-Item -LiteralPath $paths.PidFile -Force -ErrorAction SilentlyContinue
         return $null
     }
-    $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($process.Id)").CommandLine
+    $commandLine = $null
+    try {
+        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($process.Id)" -ErrorAction Stop).CommandLine
+    } catch {
+        $commandLine = $null
+    }
+    if ([string]::IsNullOrWhiteSpace($commandLine)) {
+        # WMI 受限时退回进程名校验，仍然拒绝误杀非网关进程。
+        if ($process.ProcessName -ne 'java') {
+            throw "PID file points to an unexpected process; refusing to stop PID $($process.Id)."
+        }
+        return $process
+    }
     if ($commandLine -notlike "*$serverJar*") {
         throw "PID file points to an unexpected process; refusing to stop PID $($process.Id)."
     }
     return $process
 }
 
-function Wait-Health {
-    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+function Wait-Health([int] $processId) {
+    for ($attempt = 0; $attempt -lt 90; $attempt++) {
+        if ($null -eq (Get-Process -Id $processId -ErrorAction SilentlyContinue)) {
+            return $false
+        }
         try {
             $response = Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$port/actuator/health" -TimeoutSec 2
             if ($response.StatusCode -eq 200) {
                 return $true
             }
         } catch {
-            Start-Sleep -Seconds 1
+            # 继续等待，首次启动时 Flyway 迁移和系统扫描可能较慢。
         }
+        Start-Sleep -Seconds 1
     }
     return $false
 }
@@ -109,15 +138,19 @@ function Start-Gateway {
     if (-not (Test-Path -LiteralPath $serverJar -PathType Leaf)) {
         throw 'Server artifact is missing. Run .\scripts\build.ps1 first.'
     }
+    $listener = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $listener) {
+        throw "Port $port is already in use by PID $($listener.OwningProcess). Stop that process or set GATEWAY_PORT."
+    }
     $java = Resolve-Java21
     $arguments = @('-Dfile.encoding=UTF-8', '-Duser.timezone=Asia/Shanghai', '-jar', ('"' + $serverJar + '"'))
     $process = Start-Process -FilePath $java -ArgumentList $arguments -WorkingDirectory $projectDirectory `
         -RedirectStandardOutput $paths.LogFile -RedirectStandardError $paths.ErrorLogFile `
         -WindowStyle Hidden -PassThru
     Set-Content -LiteralPath $paths.PidFile -Value $process.Id -NoNewline
-    if (-not (Wait-Health)) {
+    if (-not (Wait-Health $process.Id)) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        throw "Gateway did not become healthy. See $($paths.ErrorLogFile)."
+        throw "Gateway did not become healthy in 90 seconds. See $($paths.ErrorLogFile)."
     }
     Write-Host "Gateway started on http://127.0.0.1:$port (PID $($process.Id))."
     Write-Host "Logs: $($paths.LogFile)"

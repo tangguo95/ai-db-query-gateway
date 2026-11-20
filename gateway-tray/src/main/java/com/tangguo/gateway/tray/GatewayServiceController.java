@@ -1,7 +1,7 @@
 package com.tangguo.gateway.tray;
 
 import java.io.IOException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -36,6 +36,8 @@ final class GatewayServiceController {
                     "-NoLogo",
                     "-NoProfile",
                     "-NonInteractive",
+                    "-WindowStyle",
+                    "Hidden",
                     "-ExecutionPolicy",
                     "Bypass",
                     "-File",
@@ -43,14 +45,18 @@ final class GatewayServiceController {
                     action)
                     .directory(serviceScript.getParent().toFile())
                     .redirectErrorStream(true);
-            processBuilder.environment().put("JAVA_HOME", System.getProperty("java.home"));
+            // 只有内置运行时确实包含 java.exe 时才交给服务脚本；jpackage app-image 通常不再附带启动器。
+            Path bundledJava = Path.of(System.getProperty("java.home"), "bin", "java.exe");
+            if (Files.isRegularFile(bundledJava)) {
+                processBuilder.environment().put("JAVA_HOME", System.getProperty("java.home"));
+            }
             process = processBuilder.start();
             boolean completed = process.waitFor(90, TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
                 return new CommandResult(124, "网关操作超时");
             }
-            String output = new String(process.getInputStream().readAllBytes(), Charset.defaultCharset()).trim();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
             return new CommandResult(process.exitValue(), output);
         } catch (IOException exception) {
             if (process != null) {

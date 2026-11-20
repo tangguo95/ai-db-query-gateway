@@ -38,7 +38,7 @@ public class RequestSafetyFilter extends OncePerRequestFilter {
         response.setHeader(
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-                        + "img-src 'self' data:; connect-src 'self'; worker-src 'self'; "
+                        + "img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; "
                         + "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
 
         boolean apiRequest = request.getRequestURI().startsWith("/api/");

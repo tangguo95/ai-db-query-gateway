@@ -2,6 +2,7 @@ package com.tangguo.gateway.kubernetes;
 
 import com.tangguo.gateway.api.GatewayException;
 import com.tangguo.gateway.config.FileSecurity;
+import com.tangguo.gateway.config.GatewayDataDirectory;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -38,6 +39,14 @@ public class KubectlRunner {
             ProcessBuilder builder = new ProcessBuilder(command);
             builder.environment().clear();
             // 不继承本机 kubeconfig、代理或云凭据环境；不调用 Shell，也不开放插件命令。
+            if (GatewayDataDirectory.isWindows()) {
+                // Windows 进程启动和证书加载依赖少量系统变量，其余环境仍保持清空。
+                for (String name : List.of("SystemRoot", "SystemDrive", "windir", "TEMP", "TMP",
+                        "PATHEXT", "COMSPEC", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE")) {
+                    String value = System.getenv(name);
+                    if (value != null && !value.isBlank()) builder.environment().put(name, value);
+                }
+            }
             process = builder.start();
             process.getOutputStream().close();
             Process running = process;
@@ -70,9 +79,18 @@ public class KubectlRunner {
                 try { process.waitFor(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
             }
             if (directory != null) {
+                // Windows 上 Defender 或延迟关闭可能短暂占用临时文件，清理失败不应掩盖查询结果。
                 try (var files = Files.walk(directory)) {
-                    for (Path file : files.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(file);
-                } catch (Exception e) { throw failure("KUBERNETES_TEMP_CLEANUP_FAILED", "临时 kubeconfig 清理失败，请检查本机临时目录权限"); }
+                    for (Path file : files.sorted(Comparator.reverseOrder()).toList()) {
+                        try {
+                            Files.deleteIfExists(file);
+                        } catch (Exception ignored) {
+                            file.toFile().deleteOnExit();
+                        }
+                    }
+                } catch (Exception ignored) {
+                    directory.toFile().deleteOnExit();
+                }
             }
         }
     }
@@ -84,8 +102,12 @@ public class KubectlRunner {
             throw failure("KUBECTL_UNAVAILABLE", "配置的 kubectl 路径不可用");
         }
         List<String> candidates = new ArrayList<>(List.of("/Applications/Docker.app/Contents/Resources/bin/kubectl", "/opt/homebrew/bin/kubectl", "/usr/local/bin/kubectl", "/usr/bin/kubectl"));
-        for (String directory : System.getenv().getOrDefault("PATH", "").split(java.io.File.pathSeparator)) {
-            if (!directory.isBlank()) candidates.add(Path.of(directory, System.getProperty("os.name").startsWith("Windows") ? "kubectl.exe" : "kubectl").toString());
+        boolean windows = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("win");
+        // Windows 环境变量通常保存为 "Path"，而 Java 的 System.getenv() 映射区分大小写。
+        String pathVariable = System.getenv("PATH");
+        if (pathVariable == null) pathVariable = "";
+        for (String directory : pathVariable.split(java.io.File.pathSeparator)) {
+            if (!directory.isBlank()) candidates.add(Path.of(directory, windows ? "kubectl.exe" : "kubectl").toString());
         }
         return candidates.stream().map(Path::of).filter(p -> p.isAbsolute() && Files.isRegularFile(p) && Files.isExecutable(p))
                 .map(Path::toString).findFirst().orElseThrow(() -> failure("KUBECTL_UNAVAILABLE", "未找到 kubectl，请配置 gateway.kubernetes.kubectl-path 为已有客户端的绝对路径"));

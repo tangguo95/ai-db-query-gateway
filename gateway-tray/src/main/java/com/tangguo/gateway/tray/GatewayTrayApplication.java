@@ -7,8 +7,6 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
 import java.awt.Image;
-import java.awt.MouseInfo;
-import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.SystemTray;
 import java.awt.TrayIcon;
@@ -32,14 +30,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import javax.swing.BorderFactory;
-import javax.swing.JMenuItem;
-import javax.swing.JPopupMenu;
 import javax.swing.JOptionPane;
-import javax.swing.JWindow;
 import javax.swing.SwingUtilities;
-import javax.swing.event.PopupMenuEvent;
-import javax.swing.event.PopupMenuListener;
+import javax.swing.UIManager;
 
 /** Windows notification-area app for the local gateway. */
 public final class GatewayTrayApplication {
@@ -58,13 +51,10 @@ public final class GatewayTrayApplication {
             runnable -> namedThread(runnable, "gateway-tray-operation"));
 
     private TrayIcon trayIcon;
-    private JPopupMenu popupMenu;
-    private JWindow popupAnchor;
-    private JMenuItem statusItem;
-    private JMenuItem startItem;
-    private JMenuItem stopItem;
-    private JMenuItem restartItem;
-    private boolean operationInFlight;
+    private volatile GatewayStatusClient.Snapshot currentSnapshot =
+            GatewayStatusClient.Snapshot.unknown("检查中");
+    private volatile boolean operationInFlight;
+    private volatile boolean menuVisible;
     private long lastPopupTimestamp;
 
     private GatewayTrayApplication(
@@ -86,7 +76,32 @@ public final class GatewayTrayApplication {
             showError("当前 Windows 会话不支持系统托盘，请确认不是无头会话。");
             return;
         }
+        applySystemLookAndFeel();
         EventQueue.invokeLater(GatewayTrayApplication::launch);
+    }
+
+    private static void applySystemLookAndFeel() {
+        try {
+            // 使用 Windows 系统外观，让菜单的字体、配色和边框与本机应用保持一致。
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            Font uiFont = new Font(resolveMenuFontFamily(), Font.PLAIN, 12);
+            for (String key : List.of("Menu.font", "MenuItem.font", "PopupMenu.font", "Label.font")) {
+                UIManager.put(key, uiFont);
+            }
+        } catch (Exception ignored) {
+            // 外观设置失败时退回默认外观，不影响托盘功能。
+        }
+    }
+
+    private static String resolveMenuFontFamily() {
+        Set<String> families = Set.of(
+                GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
+        for (String family : List.of("Microsoft YaHei UI", "Microsoft YaHei", "SimSun", "Segoe UI")) {
+            if (families.contains(family)) {
+                return family;
+            }
+        }
+        return Font.DIALOG;
     }
 
     private static void launch() {
@@ -116,75 +131,13 @@ public final class GatewayTrayApplication {
 
     private void install() throws Exception {
         Files.createDirectories(logDirectory);
-        Font menuFont = resolveMenuFont();
-        popupMenu = new JPopupMenu();
-        popupMenu.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
-
-        statusItem = menuItem("网关状态：检查中…", menuFont);
-        statusItem.setEnabled(false);
-        popupMenu.add(statusItem);
-        popupMenu.addSeparator();
-
-        startItem = menuItem("启动网关", menuFont);
-        startItem.addActionListener(event -> runServiceAction("start"));
-        popupMenu.add(startItem);
-
-        stopItem = menuItem("停止网关", menuFont);
-        stopItem.addActionListener(event -> runServiceAction("stop"));
-        popupMenu.add(stopItem);
-
-        restartItem = menuItem("重启网关", menuFont);
-        restartItem.addActionListener(event -> runServiceAction("restart"));
-        popupMenu.add(restartItem);
-
-        popupMenu.addSeparator();
-        JMenuItem openConsoleItem = menuItem("打开 Web 控制台", menuFont);
-        openConsoleItem.addActionListener(event -> openConsole());
-        popupMenu.add(openConsoleItem);
-
-        JMenuItem openLogsItem = menuItem("打开日志目录", menuFont);
-        openLogsItem.addActionListener(event -> openLogs());
-        popupMenu.add(openLogsItem);
-
-        JMenuItem refreshItem = menuItem("立即刷新状态", menuFont);
-        refreshItem.addActionListener(event -> refreshStatusAsync());
-        popupMenu.add(refreshItem);
-
-        popupMenu.addSeparator();
-        JMenuItem exitItem = menuItem("退出托盘应用", menuFont);
-        exitItem.addActionListener(event -> shutdown());
-        popupMenu.add(exitItem);
-
-        popupAnchor = new JWindow();
-        popupAnchor.setFocusableWindowState(false);
-        popupAnchor.setAlwaysOnTop(true);
-        popupAnchor.setSize(1, 1);
-        popupMenu.addPopupMenuListener(new PopupMenuListener() {
-            @Override
-            public void popupMenuWillBecomeVisible(PopupMenuEvent event) {}
-
-            @Override
-            public void popupMenuWillBecomeInvisible(PopupMenuEvent event) {
-                popupAnchor.setVisible(false);
-            }
-
-            @Override
-            public void popupMenuCanceled(PopupMenuEvent event) {
-                popupAnchor.setVisible(false);
-            }
-        });
 
         trayIcon = new TrayIcon(createTrayImage(), "AI DB Query Gateway");
         trayIcon.setImageAutoSize(true);
         trayIcon.addMouseListener(new MouseAdapter() {
             @Override
-            public void mousePressed(MouseEvent event) {
-                showPopupForTrayEvent(event);
-            }
-
-            @Override
             public void mouseReleased(MouseEvent event) {
-                showPopupForTrayEvent(event);
+                showMenuForTrayEvent(event);
             }
         });
         SystemTray.getSystemTray().add(trayIcon);
@@ -196,30 +149,112 @@ public final class GatewayTrayApplication {
                 TimeUnit.SECONDS);
     }
 
-    private void showPopupForTrayEvent(MouseEvent event) {
+    private void showMenuForTrayEvent(MouseEvent event) {
+        appendLog("event id=" + event.getID() + " button=" + event.getButton() + " popup="
+                + event.isPopupTrigger() + " when=" + event.getWhen());
         if (!event.isPopupTrigger() && !SwingUtilities.isRightMouseButton(event)) {
+            appendLog("ignored: not a popup trigger");
+            return;
+        }
+        if (menuVisible) {
+            appendLog("ignored: menu already open");
             return;
         }
         long now = System.currentTimeMillis();
         if (now - lastPopupTimestamp < 150) {
+            appendLog("ignored: throttled");
             return;
         }
         lastPopupTimestamp = now;
-        EventQueue.invokeLater(this::showPopup);
+        List<NativeTrayMenu.Entry> entries = buildMenuEntries();
+        menuVisible = true;
+        trayIcon.setToolTip(null);
+        Thread menuThread = new Thread(() -> {
+            try {
+                appendLog("menu opening");
+                NativeTrayMenu.Command command = NativeTrayMenu.show(entries);
+                appendLog("menu closed command=" + command);
+                if (command != NativeTrayMenu.Command.NONE) {
+                    EventQueue.invokeLater(() -> handleCommand(command));
+                }
+            } catch (Throwable error) {
+                reportMenuFailure(error);
+            } finally {
+                menuVisible = false;
+                EventQueue.invokeLater(() -> trayIcon.setToolTip(tooltipText()));
+            }
+        }, "gateway-tray-menu");
+        menuThread.setDaemon(true);
+        try {
+            menuThread.start();
+        } catch (Throwable error) {
+            menuVisible = false;
+            EventQueue.invokeLater(() -> trayIcon.setToolTip(tooltipText()));
+            reportMenuFailure(error);
+        }
     }
 
-    private void showPopup() {
-        if (popupAnchor == null || popupMenu == null) {
-            return;
+    private String tooltipText() {
+        return "AI DB Query Gateway · " + statusTitle(currentSnapshot.state());
+    }
+
+    private void appendLog(String message) {
+        try {
+            Files.createDirectories(logDirectory);
+            Path logFile = logDirectory.resolve("tray.log");
+            if (Files.exists(logFile) && Files.size(logFile) > 262144) {
+                Files.delete(logFile);
+            }
+            Files.writeString(
+                    logFile,
+                    java.time.Instant.now() + " " + message + System.lineSeparator(),
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND);
+        } catch (Exception ignored) {
+            // 诊断日志写入失败不应影响托盘功能。
         }
-        var pointerInfo = MouseInfo.getPointerInfo();
-        if (pointerInfo == null) {
-            return;
+    }
+
+    private void reportMenuFailure(Throwable error) {
+        String message = safeMessage(error);
+        appendLog("menu failure: " + error);
+        EventQueue.invokeLater(() -> trayIcon.displayMessage(
+                "AI DB Query Gateway", "无法打开托盘菜单：" + message, TrayIcon.MessageType.ERROR));
+    }
+
+    private List<NativeTrayMenu.Entry> buildMenuEntries() {
+        GatewayStatusClient.Snapshot snapshot = currentSnapshot;
+        boolean running = snapshot.state() == GatewayStatusClient.State.RUNNING
+                || snapshot.state() == GatewayStatusClient.State.UNHEALTHY;
+        boolean stopped = snapshot.state() == GatewayStatusClient.State.STOPPED;
+        boolean known = snapshot.state() != GatewayStatusClient.State.UNKNOWN;
+        boolean busy = operationInFlight;
+        return List.of(
+                new NativeTrayMenu.Header("网关状态：" + statusTitle(snapshot.state())),
+                new NativeTrayMenu.Separator(),
+                new NativeTrayMenu.Action("启动网关", NativeTrayMenu.Command.START, !busy && stopped),
+                new NativeTrayMenu.Action("停止网关", NativeTrayMenu.Command.STOP, !busy && running),
+                new NativeTrayMenu.Action("重启网关", NativeTrayMenu.Command.RESTART, !busy && known),
+                new NativeTrayMenu.Separator(),
+                new NativeTrayMenu.Action("打开 Web 控制台", NativeTrayMenu.Command.OPEN_CONSOLE, true),
+                new NativeTrayMenu.Action("打开日志目录", NativeTrayMenu.Command.OPEN_LOGS, true),
+                new NativeTrayMenu.Action("立即刷新状态", NativeTrayMenu.Command.REFRESH, true),
+                new NativeTrayMenu.Separator(),
+                new NativeTrayMenu.Action("退出托盘应用", NativeTrayMenu.Command.EXIT, true));
+    }
+
+    private void handleCommand(NativeTrayMenu.Command command) {
+        appendLog("command=" + command);
+        switch (command) {
+            case START -> runServiceAction("start");
+            case STOP -> runServiceAction("stop");
+            case RESTART -> runServiceAction("restart");
+            case OPEN_CONSOLE -> openConsole();
+            case OPEN_LOGS -> openLogs();
+            case REFRESH -> refreshStatusAsync();
+            case EXIT -> shutdown();
+            case NONE -> { }
         }
-        Point pointer = pointerInfo.getLocation();
-        popupAnchor.setLocation(pointer);
-        popupAnchor.setVisible(true);
-        popupMenu.show(popupAnchor, 0, 0);
     }
 
     private void refreshStatusAsync() {
@@ -232,17 +267,10 @@ public final class GatewayTrayApplication {
     }
 
     private void applyStatus(GatewayStatusClient.Snapshot snapshot) {
-        String title = statusTitle(snapshot.state());
-        statusItem.setLabel("网关状态：" + title);
-        trayIcon.setToolTip("AI DB Query Gateway · " + title);
-
-        boolean running = snapshot.state() == GatewayStatusClient.State.RUNNING
-                || snapshot.state() == GatewayStatusClient.State.UNHEALTHY;
-        boolean stopped = snapshot.state() == GatewayStatusClient.State.STOPPED;
-        boolean busy = operationInFlight;
-        startItem.setEnabled(!busy && stopped);
-        stopItem.setEnabled(!busy && running);
-        restartItem.setEnabled(!busy && snapshot.state() != GatewayStatusClient.State.UNKNOWN);
+        currentSnapshot = snapshot;
+        if (!menuVisible) {
+            trayIcon.setToolTip(tooltipText());
+        }
     }
 
     private void runServiceAction(String action) {
@@ -298,12 +326,6 @@ public final class GatewayTrayApplication {
     private void shutdown() {
         statusExecutor.shutdownNow();
         operationExecutor.shutdownNow();
-        if (popupMenu != null) {
-            popupMenu.setVisible(false);
-        }
-        if (popupAnchor != null) {
-            popupAnchor.dispose();
-        }
         SystemTray.getSystemTray().remove(trayIcon);
         instanceLock.close();
         System.exit(0);
@@ -386,23 +408,6 @@ public final class GatewayTrayApplication {
         return image;
     }
 
-    private static JMenuItem menuItem(String label, Font font) {
-        JMenuItem item = new JMenuItem(label);
-        item.setFont(font);
-        return item;
-    }
-
-    private static Font resolveMenuFont() {
-        Set<String> availableFamilies = Set.of(
-                GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames());
-        for (String family : List.of("Microsoft YaHei UI", "Microsoft YaHei", "SimSun", "Segoe UI")) {
-            if (availableFamilies.contains(family)) {
-                return new Font(family, Font.PLAIN, 12);
-            }
-        }
-        return new Font(Font.SANS_SERIF, Font.PLAIN, 12);
-    }
-
     private static String statusTitle(GatewayStatusClient.State state) {
         return switch (state) {
             case RUNNING -> "运行中";
@@ -430,7 +435,7 @@ public final class GatewayTrayApplication {
         return compact.length() <= 240 ? compact : compact.substring(0, 237) + "…";
     }
 
-    private static String safeMessage(Exception exception) {
+    private static String safeMessage(Throwable exception) {
         String message = exception.getMessage();
         return message == null || message.isBlank() ? exception.getClass().getSimpleName() : truncate(message);
     }

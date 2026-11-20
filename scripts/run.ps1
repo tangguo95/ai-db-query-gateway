@@ -17,6 +17,13 @@ function Resolve-Java21 {
     if ($null -ne $command) {
         $candidates += $command.Source
     }
+    $installed = @(
+        Get-ChildItem -Path (Join-Path $env:ProgramFiles 'Eclipse Adoptium') -Filter 'jdk-21*' -Directory -ErrorAction SilentlyContinue
+        Get-ChildItem -Path (Join-Path $env:ProgramFiles 'Java') -Filter 'jdk-21*' -Directory -ErrorAction SilentlyContinue
+    )
+    foreach ($directory in $installed) {
+        $candidates += Join-Path $directory.FullName 'bin\java.exe'
+    }
     foreach ($candidate in ($candidates | Select-Object -Unique)) {
         if (Test-Path -LiteralPath $candidate) {
             $versionCommand = '"' + $candidate + '" -version 2>&1'

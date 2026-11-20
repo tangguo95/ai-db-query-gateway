@@ -27,10 +27,23 @@ public class GatewayApplication {
             return;
         }
 
-        Path dataDir = GatewayDataDirectory.resolve();
+        Path dataDir = GatewayDataDirectory.resolve(dataDirectoryArgument(args));
         Files.createDirectories(dataDir);
         FileSecurity.setOwnerOnlyDirectory(dataDir);
         System.setProperty("gateway.data-dir", dataDir.toAbsolutePath().normalize().toString());
         SpringApplication.run(GatewayApplication.class, args);
+    }
+
+    private static String dataDirectoryArgument(String[] args) {
+        for (int index = 0; index < args.length; index++) {
+            String argument = args[index];
+            if (argument.startsWith("--gateway.data-dir=")) {
+                return argument.substring("--gateway.data-dir=".length());
+            }
+            if ("--gateway.data-dir".equals(argument) && index + 1 < args.length) {
+                return args[index + 1];
+            }
+        }
+        return null;
     }
 }

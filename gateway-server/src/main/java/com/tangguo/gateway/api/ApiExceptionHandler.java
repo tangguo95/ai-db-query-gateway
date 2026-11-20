@@ -13,9 +13,16 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<Map<String, Object>> handleNotFound(NoResourceFoundException exception) {
+        // 未匹配的页面或静态资源应返回 404，而不是被兜底处理成服务内部错误。
+        return response(HttpStatus.NOT_FOUND, "NOT_FOUND", "请求的路径不存在");
+    }
 
     @ExceptionHandler(GatewayException.class)
     ResponseEntity<Map<String, Object>> handleGateway(GatewayException exception) {
