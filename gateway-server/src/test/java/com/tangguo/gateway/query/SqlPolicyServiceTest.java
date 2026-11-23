@@ -64,7 +64,7 @@ class SqlPolicyServiceTest {
         assertRejected("CREATE TABLE x(id INT)", "ONLY_SINGLE_SELECT_ALLOWED");
         assertRejected("SELECT 1; SELECT 2", "SQL_DELIMITER_FORBIDDEN");
         assertRejected("SELECT 1 -- comment", "SQL_COMMENT_FORBIDDEN");
-        assertRejected("SELECT /*+ INDEX(x) */ id FROM x", "SQL_COMMENT_FORBIDDEN");
+        assertRejected("SELECT /*+ SET_VAR(max_execution_time=0) */ id FROM x", "SQL_HINT_FORBIDDEN");
     }
 
     @Test
@@ -111,6 +111,75 @@ class SqlPolicyServiceTest {
         assertThat(analysis.tables()).contains("users");
     }
 
+    @Test
+    void acceptsIndexHintsWithoutManagedAllowlist() {
+        for (DatabaseType type : DatabaseType.values()) {
+            for (String hint : java.util.List.of(
+                    "INDEX(o idx_orders_created)",
+                    "index (o, idx_orders_created)",
+                    "NO_INDEX(o idx_orders_created idx_orders_status)",
+                    "INDEX_ASC(o idx_orders_created)",
+                    "INDEX_DESC(o idx_orders_created)",
+                    "INDEX(o idx_orders_created) NO_INDEX(o idx_orders_status)")) {
+                SqlAnalysis analysis = policy.analyze(type,
+                        "SELECT /*+ " + hint + " */ o.id FROM orders o WHERE o.created_at >= ? AND o.status = ?", 100);
+                assertThat(analysis.parameterCount()).isEqualTo(2);
+                assertThat(analysis.tables()).containsExactly("orders");
+                assertThat(analysis.riskReasons()).isEmpty();
+            }
+        }
+        assertThat(policy.analyze(DatabaseType.OCEANBASE_ORACLE,
+                "SELECT /*+ INDEX(\"O\" \"IDX_ORDERS\") */ o.id FROM orders o WHERE o.id = ?", 100)
+                .parameterCount()).isEqualTo(1);
+        assertThat(policy.analyze(DatabaseType.MYSQL,
+                "SELECT /*+ INDEX(`o` `idx_orders`) */ o.id FROM orders o WHERE o.id = ?", 100)
+                .parameterCount()).isEqualTo(1);
+    }
+
+    @Test
+    void indexHintsPreserveCteNestedQueryAndRiskInspection() {
+        for (DatabaseType type : DatabaseType.values()) {
+            String sql = "WITH recent AS (SELECT /*+ INDEX(o idx_orders_created) */ o.id FROM app.orders o "
+                    + "WHERE o.created_at >= ?) SELECT * FROM recent "
+                    + "UNION ALL SELECT * FROM archive.orders WHERE id IN "
+                    + "(SELECT /*+ INDEX(a idx_archived_id) */ a.id FROM archived_orders a WHERE a.id = ?)";
+            SqlAnalysis hinted = policy.analyze(type, sql, 500);
+            SqlAnalysis plain = policy.analyze(type, sql.replaceAll("/\\*\\+.*?\\*/", ""), 500);
+            assertThat(hinted.parameterCount()).isEqualTo(plain.parameterCount()).isEqualTo(2);
+            assertThat(hinted.tables()).isEqualTo(plain.tables());
+            assertThat(hinted.schemas()).isEqualTo(plain.schemas());
+            assertThat(hinted.riskReasons()).isEqualTo(plain.riskReasons())
+                    .contains("SELECT_ALL", "CROSS_SCHEMA_QUERY", "MAX_ROWS_OVER_AUTO_LIMIT");
+        }
+    }
+
+    @Test
+    void indexHintsCannotBypassReadOnlyPolicy() {
+        for (DatabaseType type : DatabaseType.values()) {
+            for (String sql : java.util.List.of(
+                    "SELECT /*+ INDEX(o idx) SET_VAR(max_execution_time=0) */ id FROM orders o",
+                    "SELECT /*+ INDEX(o SLEEP(1)) */ id FROM orders o",
+                    "SELECT /*+ INDEX(o idx); DELETE FROM orders */ id FROM orders o",
+                    "SELECT /*+ INDEX(o idx) /* nested */ id FROM orders o",
+                    "SELECT /*+ INDEX(o idx) */ id FROM orders o /* comment */",
+                    "SELECT /*+ INDEX(o idx) */ id FROM orders o /*! FOR UPDATE */",
+                    "SELECT /*+ INDEX(o idx) */ id FROM orders o; DELETE FROM orders",
+                    "SELECT /*+ INDEX(o idx) */ id FROM orders o FOR UPDATE",
+                    "SELECT /*+ INDEX(o idx) */ SLEEP(1) FROM orders o",
+                    "SELECT /*+ INDEX(o idx) */ @@version FROM orders o",
+                    "SELECT /*+ INDEX(o idx) */ id INTO target_id FROM orders o",
+                    "DELETE /*+ INDEX(o idx) */ FROM orders o",
+                    "SELECT /*+ INDEX() */ id FROM orders o",
+                    "SELECT /*+ INDEX(o,idx,) */ id FROM orders o",
+                    "SELECT /*+ INDEX(o idx) */ id FROM orders o -- comment",
+                    "SELECT /*+ INDEX(o idx) */ id FROM orders o # comment",
+                    "SELECT /*+ INDEX(o idx) id FROM orders o")) {
+                assertThatThrownBy(() -> policy.analyze(type, sql, 100))
+                        .as("%s: %s", type, sql).isInstanceOf(GatewayException.class);
+            }
+        }
+    }
+
     private void assertRejected(String sql, String code) {
         assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL, sql, 100))
                 .isInstanceOfSatisfying(
@@ -139,6 +208,9 @@ class SqlPolicyServiceTest {
         rules.saveHints(DatabaseType.OCEANBASE_ORACLE, java.util.List.of("MATERIALIZE"));
         String sql = "WITH t AS (SELECT /*+ materialize */ id FROM orders WHERE id = ?) SELECT id FROM t";
         assertThat(policy.analyze(DatabaseType.OCEANBASE_ORACLE, sql, 100, "source-a").parameterCount()).isEqualTo(1);
+        assertThat(policy.analyze(DatabaseType.OCEANBASE_ORACLE,
+                sql.replace("materialize", "materialize INDEX(orders idx_orders)"), 100, "source-a")
+                .parameterCount()).isEqualTo(1);
         assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL, sql, 100)).isInstanceOf(GatewayException.class);
         for (String unsafe : java.util.List.of(
                 "SELECT /*+ MATERIALIZE SET_VAR(max_execution_time=0) */ id FROM orders",

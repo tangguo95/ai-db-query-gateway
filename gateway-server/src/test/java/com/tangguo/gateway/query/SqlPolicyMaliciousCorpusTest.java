@@ -122,7 +122,7 @@ class SqlPolicyMaliciousCorpusTest {
                 sqlForBoth(
                         "optimizer hint",
                         "SELECT /*+ FULL(app_user) */ id FROM app_user WHERE id = 1",
-                        "SQL_COMMENT_FORBIDDEN"))
+                        "SQL_HINT_FORBIDDEN"))
                 .flatMap(stream -> stream);
     }
 

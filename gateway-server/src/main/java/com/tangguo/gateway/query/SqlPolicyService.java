@@ -34,6 +34,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,12 @@ public class SqlPolicyService {
     private static final Pattern STRING_LITERAL = Pattern.compile("'(?:''|[^'])*'");
     private static final Pattern NUMBER_LITERAL =
             Pattern.compile("(?<![A-Za-z0-9_$])[-+]?\\d+(?:\\.\\d+)?(?![A-Za-z0-9_$])");
+    private static final Set<String> INDEX_HINTS = Set.of("INDEX", "NO_INDEX", "INDEX_ASC", "INDEX_DESC");
+    private static final Pattern OPTIMIZER_HINT = Pattern.compile("\\s*([A-Z_]+)(?:\\s*\\(([^()]*)\\))?");
+    private static final String HINT_IDENTIFIER = "(?:[A-Z_][A-Z0-9_$]*|\"[A-Z_][A-Z0-9_$]*\"|`[A-Z_][A-Z0-9_$]*`)";
+    private static final String HINT_QUALIFIED_IDENTIFIER = HINT_IDENTIFIER + "(?:\\." + HINT_IDENTIFIER + ")*";
+    private static final Pattern INDEX_HINT_ARGUMENTS = Pattern.compile(
+            HINT_QUALIFIED_IDENTIFIER + "(?:(?:\\s*,\\s*|\\s+)" + HINT_QUALIFIED_IDENTIFIER + ")*");
     private static final Set<String> ALLOWED_FUNCTIONS = Set.of(
             "ABS",
             "ACOS",
@@ -171,7 +178,7 @@ public class SqlPolicyService {
     }
 
     /**
-     * AST 是查询准入的权威判断；词法预检只负责在解析前禁止注释和多语句分隔符。
+     * AST 是查询准入的权威判断；词法预检仅放行受限优化提示，禁止普通注释和多语句分隔符。
      */
     public SqlAnalysis analyze(DatabaseType databaseType, String sql, int requestedMaxRows) {
         return analyze(databaseType, sql, requestedMaxRows, null);
@@ -340,26 +347,44 @@ public class SqlPolicyService {
                 }
                 reject("SESSION_VARIABLE_FORBIDDEN", "禁止读取或修改数据库会话变量");
             } else if (current == '/' && next == '*' && index + 2 < sql.length()
-                    && sql.charAt(index + 2) == '+' && !hints.isEmpty()) {
+                    && sql.charAt(index + 2) == '+') {
                 int end = sql.indexOf("*/", index + 3);
                 if (end < 0) reject("SQL_HINT_FORBIDDEN", "Hint 未闭合");
                 String content = sql.substring(index + 3, end).trim().toUpperCase(Locale.ROOT);
-                // 只接收白名单内的无参数优化提示，版本注释、会话参数及嵌套注释不能借此通过。
-                if (content.isEmpty() || !content.matches("[A-Z_\\s]+")) {
-                    reject("SQL_HINT_FORBIDDEN", "当前仅允许白名单内的无参数 Hint");
-                }
-                for (String name : content.split("\\s+")) {
-                    if (!hints.contains(name)) reject("SQL_HINT_FORBIDDEN", "Hint 未列入当前数据库类型白名单：" + name);
-                }
+                validateHints(content, hints);
                 index = end + 1;
             } else if ((current == '-' && next == '-')
                     || current == '#'
                     || (current == '/' && next == '*')) {
-                reject("SQL_COMMENT_FORBIDDEN", "禁止 SQL 注释和 Hint");
+                reject("SQL_COMMENT_FORBIDDEN", "禁止普通 SQL 注释和版本注释");
             }
         }
         if (singleQuote || doubleQuote || backtick) {
             reject("SQL_PARSE_FAILED", "SQL 字符串或标识符未闭合");
+        }
+    }
+
+    private void validateHints(String content, Set<String> hints) {
+        Matcher matcher = OPTIMIZER_HINT.matcher(content);
+        int consumed = 0;
+        while (matcher.find()) {
+            if (matcher.start() != consumed) {
+                reject("SQL_HINT_FORBIDDEN", "Hint 语法不受支持");
+            }
+            String name = matcher.group(1);
+            String arguments = matcher.group(2);
+            // 索引提示默认允许，但参数只能是表、别名和索引标识符，不能夹带表达式或会话设置。
+            if (INDEX_HINTS.contains(name)) {
+                if (arguments == null || !INDEX_HINT_ARGUMENTS.matcher(arguments.trim()).matches()) {
+                    reject("SQL_HINT_FORBIDDEN", "索引 Hint 只允许表、别名和索引名称参数");
+                }
+            } else if (!hints.contains(name) || arguments != null) {
+                reject("SQL_HINT_FORBIDDEN", "Hint 未允许或参数不受支持：" + name);
+            }
+            consumed = matcher.end();
+        }
+        if (content.isEmpty() || consumed != content.length()) {
+            reject("SQL_HINT_FORBIDDEN", "Hint 语法不受支持");
         }
     }
 
