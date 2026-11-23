@@ -66,7 +66,6 @@ class SqlPolicyServiceTest {
         assertRejected("CREATE TABLE x(id INT)", "ONLY_SINGLE_SELECT_ALLOWED");
         assertRejected("SELECT 1; SELECT 2", "SQL_DELIMITER_FORBIDDEN");
         assertRejected("SELECT 1 -- comment", "SQL_COMMENT_FORBIDDEN");
-        assertRejected("SELECT /*+ SET_VAR(max_execution_time=0) */ id FROM x", "SQL_HINT_FORBIDDEN");
     }
 
     @Test
@@ -176,10 +175,37 @@ class SqlPolicyServiceTest {
                 .parameterCount()).isEqualTo(1);
     }
 
+    @ParameterizedTest
+    @EnumSource(DatabaseType.class)
+    void acceptsAllOptimizerHintsWithoutNameOrArgumentAllowlist(DatabaseType type) {
+        for (String hint : java.util.List.of(
+                "USE_NL(o)",
+                "LEADING(o a)",
+                "LEADING((o a) b) USE_NL(a b)",
+                "LEADING(@main (o a)) USE_NL(@main a) QB_NAME(main)",
+                "MATERIALIZE INLINE MERGE NO_MERGE",
+                "FULL(o) PARALLEL(o 4) USE_HASH(a) USE_MERGE(b)",
+                "OPT_PARAM('optimizer_dynamic_sampling' 2)",
+                "MAX_EXECUTION_TIME(1000) SET_VAR(sort_buffer_size=1048576)",
+                "UNLISTED_FUTURE_HINT(o, nested(argument(?)), 'x; @value -- text')",
+                "INDEX(o idx) SET_VAR(max_execution_time=0)",
+                "INDEX(o SLEEP(1))",
+                "INDEX()",
+                "INDEX(o,idx,)",
+                "INDEX(o idx); DELETE FROM orders")) {
+            // 只校验查询准入，不让数据库执行 Hint 或函数；Hint 内的 ? 不计入绑定参数。
+            SqlAnalysis analysis = policy.analyze(type,
+                    "SELECT /*+ " + hint + " */ app.custom_value(?) FROM orders o WHERE o.id = ?", 100);
+            assertThat(analysis.parameterCount()).as("%s: %s", type, hint).isEqualTo(2);
+            assertThat(analysis.tables()).containsExactly("orders");
+            assertThat(analysis.riskReasons()).isEmpty();
+        }
+    }
+
     @Test
     void indexHintsPreserveCteNestedQueryAndRiskInspection() {
         for (DatabaseType type : DatabaseType.values()) {
-            String sql = "WITH recent AS (SELECT /*+ INDEX(o idx_orders_created) */ o.id FROM app.orders o "
+            String sql = "WITH recent AS (SELECT /*+ MATERIALIZE LEADING(o) USE_NL(o) */ o.id FROM app.orders o "
                     + "WHERE o.created_at >= ?) SELECT * FROM recent "
                     + "UNION ALL SELECT * FROM archive.orders WHERE id IN "
                     + "(SELECT /*+ INDEX(a idx_archived_id) */ a.id FROM archived_orders a WHERE a.id = ?)";
@@ -194,13 +220,9 @@ class SqlPolicyServiceTest {
     }
 
     @Test
-    void indexHintsCannotBypassReadOnlyPolicy() {
+    void unrestrictedHintsCannotBypassReadOnlyPolicy() {
         for (DatabaseType type : DatabaseType.values()) {
             for (String sql : java.util.List.of(
-                    "SELECT /*+ INDEX(o idx) SET_VAR(max_execution_time=0) */ id FROM orders o",
-                    "SELECT /*+ INDEX(o SLEEP(1)) */ id FROM orders o",
-                    "SELECT /*+ INDEX(o idx); DELETE FROM orders */ id FROM orders o",
-                    "SELECT /*+ INDEX(o idx) /* nested */ id FROM orders o",
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o /* comment */",
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o /*! FOR UPDATE */",
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o; DELETE FROM orders",
@@ -208,8 +230,11 @@ class SqlPolicyServiceTest {
                     "SELECT /*+ INDEX(o idx) */ @@version FROM orders o",
                     "SELECT /*+ INDEX(o idx) */ id INTO target_id FROM orders o",
                     "DELETE /*+ INDEX(o idx) */ FROM orders o",
-                    "SELECT /*+ INDEX() */ id FROM orders o",
-                    "SELECT /*+ INDEX(o,idx,) */ id FROM orders o",
+                    "SELECT /*+ LEADING(o) USE_NL(o) */ app.custom_value(@@version) FROM orders o",
+                    "SELECT /*+ LEADING(o) */ app.custom_value((SELECT id FROM orders FOR UPDATE)) FROM orders o",
+                    "SELECT /*+ LEADING(o) */ id FROM orders o INTO OUTFILE '/tmp/x'",
+                    "UPDATE /*+ LEADING(o) */ orders o SET id = 1",
+                    "SELECT /*+ LEADING(o) */ id FROM orders o */ DELETE FROM orders",
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o -- comment",
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o # comment",
                     "SELECT /*+ INDEX(o idx) id FROM orders o")) {
@@ -226,7 +251,7 @@ class SqlPolicyServiceTest {
     }
 
     @Test
-    void legacyFunctionSettingsDoNotRestrictQueriesAndHintAllowlistRemainsScoped() {
+    void legacyFunctionAndHintSettingsDoNotRestrictQueries() {
         var settings = mock(com.tangguo.gateway.security.SettingService.class);
         var sources = mock(com.tangguo.gateway.datasource.DataSourceRepository.class);
         var values = new java.util.HashMap<String, String>();
@@ -237,7 +262,6 @@ class SqlPolicyServiceTest {
             return null;
         }).when(settings).put(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
         var rules = new SqlAllowlistService(settings, sources);
-        policy.setAllowlist(rules);
         rules.saveFunctions("source-a", java.util.List.of("business_minutes"));
         assertThat(policy.analyze(DatabaseType.MYSQL,
                 "SELECT business_minutes(?) FROM orders WHERE id = ?", 100, "source-a").parameterCount())
@@ -250,13 +274,11 @@ class SqlPolicyServiceTest {
         assertThat(policy.analyze(DatabaseType.OCEANBASE_ORACLE,
                 sql.replace("materialize", "materialize INDEX(orders idx_orders)"), 100, "source-a")
                 .parameterCount()).isEqualTo(1);
-        assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL, sql, 100)).isInstanceOf(GatewayException.class);
+        assertThat(policy.analyze(DatabaseType.MYSQL, sql, 100).parameterCount()).isEqualTo(1);
         for (String unsafe : java.util.List.of(
-                "SELECT /*+ MATERIALIZE SET_VAR(max_execution_time=0) */ id FROM orders",
                 "SELECT /*+ MATERIALIZE */ id FROM orders; DELETE FROM orders",
                 "SELECT /*+ MATERIALIZE */ id FROM orders /* comment */",
-                "SELECT /*+ MATERIALIZE */ id FROM orders FOR UPDATE",
-                "SELECT /*+ MATERIALIZE(DELETE FROM orders) */ id FROM orders")) {
+                "SELECT /*+ MATERIALIZE */ id FROM orders FOR UPDATE")) {
             assertThatThrownBy(() -> policy.analyze(DatabaseType.OCEANBASE_ORACLE, unsafe, 100))
                     .isInstanceOf(GatewayException.class);
         }
@@ -265,5 +287,11 @@ class SqlPolicyServiceTest {
                 "SELECT business_minutes(?) FROM orders", 100, "source-a").parameterCount()).isEqualTo(1);
         rules.saveFunctions("source-a", java.util.List.of("LOAD_FILE"));
         assertThat(rules.functions("source-a")).containsExactly("LOAD_FILE");
+        rules.saveHints(DatabaseType.OCEANBASE_ORACLE, java.util.List.of("LEADING", "USE_NL"));
+        assertThat(rules.hints(DatabaseType.OCEANBASE_ORACLE)).containsExactlyInAnyOrder("LEADING", "USE_NL");
+        rules.saveHints(DatabaseType.OCEANBASE_ORACLE, java.util.List.of());
+        assertThat(policy.analyze(DatabaseType.OCEANBASE_ORACLE,
+                sql.replace("materialize", "LEADING(orders) USE_NL(orders)"), 100, "source-b")
+                .parameterCount()).isEqualTo(1);
     }
 }

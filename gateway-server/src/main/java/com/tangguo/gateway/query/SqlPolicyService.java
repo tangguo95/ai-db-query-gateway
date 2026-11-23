@@ -34,7 +34,6 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -44,12 +43,6 @@ public class SqlPolicyService {
     private static final Pattern STRING_LITERAL = Pattern.compile("'(?:''|[^'])*'");
     private static final Pattern NUMBER_LITERAL =
             Pattern.compile("(?<![A-Za-z0-9_$])[-+]?\\d+(?:\\.\\d+)?(?![A-Za-z0-9_$])");
-    private static final Set<String> INDEX_HINTS = Set.of("INDEX", "NO_INDEX", "INDEX_ASC", "INDEX_DESC");
-    private static final Pattern OPTIMIZER_HINT = Pattern.compile("\\s*([A-Z_]+)(?:\\s*\\(([^()]*)\\))?");
-    private static final String HINT_IDENTIFIER = "(?:[A-Z_][A-Z0-9_$]*|\"[A-Z_][A-Z0-9_$]*\"|`[A-Z_][A-Z0-9_$]*`)";
-    private static final String HINT_QUALIFIED_IDENTIFIER = HINT_IDENTIFIER + "(?:\\." + HINT_IDENTIFIER + ")*";
-    private static final Pattern INDEX_HINT_ARGUMENTS = Pattern.compile(
-            HINT_QUALIFIED_IDENTIFIER + "(?:(?:\\s*,\\s*|\\s+)" + HINT_QUALIFIED_IDENTIFIER + ")*");
     // 仅供管理页面展示常用函数，不参与查询准入判断。
     private static final Set<String> FUNCTION_EXAMPLES = Set.of(
             "ABS",
@@ -161,13 +154,6 @@ public class SqlPolicyService {
 
     private final GatewayProperties properties;
     private final DataSourceService dataSourceService;
-    private SqlAllowlistService allowlist;
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public void setAllowlist(SqlAllowlistService allowlist) {
-        this.allowlist = allowlist;
-    }
-
     public static List<String> builtInFunctions() {
         return FUNCTION_EXAMPLES.stream().sorted().toList();
     }
@@ -178,7 +164,7 @@ public class SqlPolicyService {
     }
 
     /**
-     * AST 是查询准入的权威判断；词法预检仅放行受限优化提示，禁止普通注释和多语句分隔符。
+     * AST 是查询准入的权威判断；优化提示不限制名称和参数，仍禁止普通注释和多语句分隔符。
      */
     public SqlAnalysis analyze(DatabaseType databaseType, String sql, int requestedMaxRows) {
         return analyze(databaseType, sql, requestedMaxRows, null);
@@ -191,8 +177,7 @@ public class SqlPolicyService {
         if (sql.getBytes(StandardCharsets.UTF_8).length > properties.getQuery().getMaxSqlBytes()) {
             reject("SQL_TOO_LARGE", "SQL 超过 32 KiB 安全限制");
         }
-        Set<String> hints = allowlist == null ? Set.of() : allowlist.hints(databaseType);
-        rejectCommentsAndDelimiters(sql, hints);
+        rejectCommentsAndDelimiters(sql);
         DbType dialect =
                 databaseType == DatabaseType.OCEANBASE_ORACLE ? DbType.oracle : DbType.mysql;
         List<SQLStatement> statements;
@@ -301,7 +286,7 @@ public class SqlPolicyService {
                 inspection.parameterCount);
     }
 
-    private void rejectCommentsAndDelimiters(String sql, Set<String> hints) {
+    private void rejectCommentsAndDelimiters(String sql) {
         boolean singleQuote = false;
         boolean doubleQuote = false;
         boolean backtick = false;
@@ -346,9 +331,8 @@ public class SqlPolicyService {
             } else if (current == '/' && next == '*' && index + 2 < sql.length()
                     && sql.charAt(index + 2) == '+') {
                 int end = sql.indexOf("*/", index + 3);
-                if (end < 0) reject("SQL_HINT_FORBIDDEN", "Hint 未闭合");
-                String content = sql.substring(index + 3, end).trim().toUpperCase(Locale.ROOT);
-                validateHints(content, hints);
+                if (end < 0) reject("SQL_PARSE_FAILED", "SQL 优化提示未闭合");
+                // 提示内容交给数据库处理；结束后继续扫描，不能让 Hint 遮蔽后续写操作或多语句。
                 index = end + 1;
             } else if ((current == '-' && next == '-')
                     || current == '#'
@@ -358,30 +342,6 @@ public class SqlPolicyService {
         }
         if (singleQuote || doubleQuote || backtick) {
             reject("SQL_PARSE_FAILED", "SQL 字符串或标识符未闭合");
-        }
-    }
-
-    private void validateHints(String content, Set<String> hints) {
-        Matcher matcher = OPTIMIZER_HINT.matcher(content);
-        int consumed = 0;
-        while (matcher.find()) {
-            if (matcher.start() != consumed) {
-                reject("SQL_HINT_FORBIDDEN", "Hint 语法不受支持");
-            }
-            String name = matcher.group(1);
-            String arguments = matcher.group(2);
-            // 索引提示默认允许，但参数只能是表、别名和索引标识符，不能夹带表达式或会话设置。
-            if (INDEX_HINTS.contains(name)) {
-                if (arguments == null || !INDEX_HINT_ARGUMENTS.matcher(arguments.trim()).matches()) {
-                    reject("SQL_HINT_FORBIDDEN", "索引 Hint 只允许表、别名和索引名称参数");
-                }
-            } else if (!hints.contains(name) || arguments != null) {
-                reject("SQL_HINT_FORBIDDEN", "Hint 未允许或参数不受支持：" + name);
-            }
-            consumed = matcher.end();
-        }
-        if (content.isEmpty() || consumed != content.length()) {
-            reject("SQL_HINT_FORBIDDEN", "Hint 语法不受支持");
         }
     }
 

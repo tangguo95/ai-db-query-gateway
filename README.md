@@ -33,8 +33,8 @@ AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查�
 - 数据库查询拒绝写操作、DDL、事务和会话控制、多语句、锁查询、SELECT INTO/OUTFILE、数据库链接及递归 CTE；此限制不等同于服务器的完整权限模式。
 - 查询中的所有内置函数、自定义函数及带 Schema 或包名的函数均不再按名称限制，无需配置函数白名单。
   函数能否执行及其行为由目标数据库和账号权限决定，网关不再按函数名判断副作用。安全设置中的函数列表仅供参考。
-  默认支持 INDEX、NO_INDEX、INDEX_ASC、INDEX_DESC 索引提示，例如 `/*+ INDEX(o idx_orders_created) */`，参数仅限表、别名和索引名称。
-  无参数 MATERIALIZE、INLINE、MERGE、NO_MERGE Hint 仍需按数据库类型启用；白名单修改立即生效并写入审计。
+- 查询中的所有 `/*+ ... */` 优化器 Hint 均不再按名称或参数白名单限制，包括 USE_NL、LEADING、INDEX、MATERIALIZE、PARALLEL 及组合和嵌套参数，无需按数据库类型开启。
+  提示内容原样传递，是否支持及如何生效由目标数据库决定；网关仍检查提示之外的 SQL 结构和绑定参数。
 - 数据库查询限制行数、响应大小、字段大小、超时和并发，支持一次性审批、取消和回滚；服务器命令另有执行限制。
 - Never writes query results to SQLite, audit records, ordinary logs, CSV files, or Excel files.
   For administrator review, the service keeps at most 20 recent results in process memory for

@@ -99,13 +99,13 @@ class SqlPolicyMaliciousCorpusTest {
     }
 
     @ParameterizedTest(name = "{0}: {1}")
-    @MethodSource("multiStatementCommentAndHintCases")
-    void rejectsMultiStatementCommentsAndHints(
+    @MethodSource("multiStatementAndCommentCases")
+    void rejectsMultiStatementsAndOrdinaryComments(
             DatabaseType databaseType, String label, String sql, String expectedCode) {
         assertRejectedWithCode(databaseType, sql, expectedCode);
     }
 
-    static Stream<Arguments> multiStatementCommentAndHintCases() {
+    static Stream<Arguments> multiStatementAndCommentCases() {
         return Stream.of(
                 sqlForBoth(
                         "multi statement",
@@ -118,11 +118,7 @@ class SqlPolicyMaliciousCorpusTest {
                 sqlForBoth(
                         "block comment",
                         "SELECT id FROM app_user /* bypass */ WHERE id = 1",
-                        "SQL_COMMENT_FORBIDDEN"),
-                sqlForBoth(
-                        "optimizer hint",
-                        "SELECT /*+ FULL(app_user) */ id FROM app_user WHERE id = 1",
-                        "SQL_HINT_FORBIDDEN"))
+                        "SQL_COMMENT_FORBIDDEN"))
                 .flatMap(stream -> stream);
     }
 
