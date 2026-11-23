@@ -50,7 +50,8 @@ public class SqlPolicyService {
     private static final String HINT_QUALIFIED_IDENTIFIER = HINT_IDENTIFIER + "(?:\\." + HINT_IDENTIFIER + ")*";
     private static final Pattern INDEX_HINT_ARGUMENTS = Pattern.compile(
             HINT_QUALIFIED_IDENTIFIER + "(?:(?:\\s*,\\s*|\\s+)" + HINT_QUALIFIED_IDENTIFIER + ")*");
-    private static final Set<String> ALLOWED_FUNCTIONS = Set.of(
+    // 仅供管理页面展示常用函数，不参与查询准入判断。
+    private static final Set<String> FUNCTION_EXAMPLES = Set.of(
             "ABS",
             "ACOS",
             "ADD_MONTHS",
@@ -89,7 +90,6 @@ public class SqlPolicyService {
             "FLOOR",
             "FROM_UNIXTIME",
             "GREATEST",
-            // 用户明确允许的工作日分钟数业务函数；不扩大为任意自定义函数。
             "GET_WORKDAY_MINUTES",
             "GROUP_CONCAT",
             "HEX",
@@ -169,7 +169,7 @@ public class SqlPolicyService {
     }
 
     public static List<String> builtInFunctions() {
-        return ALLOWED_FUNCTIONS.stream().sorted().toList();
+        return FUNCTION_EXAMPLES.stream().sorted().toList();
     }
 
     public SqlPolicyService(GatewayProperties properties, DataSourceService dataSourceService) {
@@ -239,7 +239,6 @@ public class SqlPolicyService {
             }
         }
         InspectionState inspection = new InspectionState(with);
-        inspection.customFunctions = allowlist == null ? Set.of() : allowlist.functions(sourceId);
         SQLASTVisitor visitor = databaseType == DatabaseType.OCEANBASE_ORACLE
                 ? new OracleInspectionVisitor(inspection)
                 : new MySqlInspectionVisitor(inspection);
@@ -267,10 +266,8 @@ public class SqlPolicyService {
         if (inspection.sessionVariableAccess) {
             reject("SESSION_VARIABLE_FORBIDDEN", "禁止读取或修改数据库会话变量");
         }
-        if (!inspection.unknownFunctions.isEmpty()) {
-            reject(
-                    "UNKNOWN_FUNCTION_FORBIDDEN",
-                    "包含未列入只读白名单的函数：" + String.join(", ", inspection.unknownFunctions));
+        if (inspection.procedure) {
+            reject("SELECT_PROCEDURE_FORBIDDEN", "禁止 SELECT PROCEDURE 子句");
         }
         if (inspection.databaseLink) {
             reject("DATABASE_LINK_FORBIDDEN", "禁止数据库链接或远程表引用");
@@ -429,11 +426,9 @@ public class SqlPolicyService {
     }
 
     private static final class InspectionState {
-        private Set<String> customFunctions = Set.of();
         private final Set<String> cteNames = new HashSet<>();
         private final Set<String> tables = new HashSet<>();
         private final Set<String> schemas = new HashSet<>();
-        private final Set<String> unknownFunctions = new HashSet<>();
         private int queryBlockDepth;
         private int parameterCount;
         private boolean selectAll;
@@ -443,6 +438,7 @@ public class SqlPolicyService {
         private boolean databaseLink;
         private boolean sequenceAccess;
         private boolean sessionVariableAccess;
+        private boolean procedure;
 
         private InspectionState(SQLWithSubqueryClause with) {
             if (with != null) {
@@ -487,15 +483,6 @@ public class SqlPolicyService {
 
         private boolean visitAllColumn() {
             selectAll = true;
-            return true;
-        }
-
-        private boolean visitFunction(SQLMethodInvokeExpr function) {
-            String name = function.getMethodName();
-            if (name == null || (!ALLOWED_FUNCTIONS.contains(name.toUpperCase(Locale.ROOT))
-                    && !(function.getOwner() == null && customFunctions.contains(name.toUpperCase(Locale.ROOT))))) {
-                unknownFunctions.add(name == null ? "<unknown>" : name);
-            }
             return true;
         }
 
@@ -550,9 +537,7 @@ public class SqlPolicyService {
         public boolean visit(MySqlSelectQueryBlock queryBlock) {
             boolean visitChildren = state.visitQueryBlock(queryBlock);
             state.locking |= queryBlock.isLockInShareMode();
-            if (queryBlock.getProcedureName() != null) {
-                state.unknownFunctions.add("PROCEDURE");
-            }
+            state.procedure |= queryBlock.getProcedureName() != null;
             return visitChildren;
         }
 
@@ -578,7 +563,8 @@ public class SqlPolicyService {
 
         @Override
         public boolean visit(SQLMethodInvokeExpr function) {
-            return state.visitFunction(function);
+            // 函数名不受限制，仍遍历参数，检查嵌套查询、会话变量并统计绑定参数。
+            return true;
         }
 
         @Override
@@ -643,7 +629,8 @@ public class SqlPolicyService {
 
         @Override
         public boolean visit(SQLMethodInvokeExpr function) {
-            return state.visitFunction(function);
+            // 函数名不受限制，仍遍历参数，检查嵌套查询、会话变量并统计绑定参数。
+            return true;
         }
 
         @Override

@@ -8,13 +8,10 @@ import java.util.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-/** 每次准入读取持久化规则，管理员保存后无需重启。 */
+/** Hint 每次准入读取持久化规则；旧函数配置仅为兼容保留，不再限制查询。 */
 @Service
 public class SqlAllowlistService {
     public static final Set<String> SUPPORTED_HINTS = Set.of("MATERIALIZE", "INLINE", "MERGE", "NO_MERGE");
-    private static final Set<String> FORBIDDEN_FUNCTIONS = Set.of(
-            "SLEEP", "BENCHMARK", "LOAD_FILE", "GET_LOCK", "RELEASE_LOCK", "RELEASE_ALL_LOCKS",
-            "NEXTVAL", "SETVAL", "SYS_EXEC", "SYS_EVAL");
     private final SettingService settings;
     private final DataSourceRepository sources;
 
@@ -34,7 +31,6 @@ public class SqlAllowlistService {
     public void saveFunctions(String sourceId, List<String> names) {
         sources.require(sourceId);
         Set<String> validated = validate(names);
-        if (!Collections.disjoint(validated, FORBIDDEN_FUNCTIONS)) invalid("不能允许文件操作、锁、序列修改或休眠函数");
         settings.put("sql.allowlist.functions." + sourceId, String.join(",", validated));
     }
 

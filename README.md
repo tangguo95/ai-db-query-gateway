@@ -30,8 +30,9 @@ AI DB Query Gateway 是一个本地优先、带审计能力的 AI 数据库查�
 - MCP 不暴露保存的连接信息、认证材料、Keychain 引用或管理接口；远程命令输出由 SSH 账号的可访问范围决定。
 - Applies an AST-based SQL policy before opening a business-database connection. Only one
   `SELECT`, `UNION`, or non-recursive CTE whose final statement is a query is accepted.
-- 数据库查询拒绝写操作、DDL、事务和会话控制、多语句、锁、文件操作、数据库链接、递归 CTE 及未支持函数；此限制不等同于服务器的完整权限模式。
-- Security settings list the default functions and manage additional functions per data source.
+- 数据库查询拒绝写操作、DDL、事务和会话控制、多语句、锁查询、SELECT INTO/OUTFILE、数据库链接及递归 CTE；此限制不等同于服务器的完整权限模式。
+- 查询中的所有内置函数、自定义函数及带 Schema 或包名的函数均不再按名称限制，无需配置函数白名单。
+  函数能否执行及其行为由目标数据库和账号权限决定，网关不再按函数名判断副作用。安全设置中的函数列表仅供参考。
   默认支持 INDEX、NO_INDEX、INDEX_ASC、INDEX_DESC 索引提示，例如 `/*+ INDEX(o idx_orders_created) */`，参数仅限表、别名和索引名称。
   无参数 MATERIALIZE、INLINE、MERGE、NO_MERGE Hint 仍需按数据库类型启用；白名单修改立即生效并写入审计。
 - 数据库查询限制行数、响应大小、字段大小、超时和并发，支持一次性审批、取消和回滚；服务器命令另有执行限制。

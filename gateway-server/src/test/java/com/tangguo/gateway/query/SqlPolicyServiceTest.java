@@ -11,6 +11,8 @@ import com.tangguo.gateway.datasource.DataSourceService;
 import com.tangguo.gateway.model.DatabaseType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class SqlPolicyServiceTest {
     private SqlPolicyService policy;
@@ -68,15 +70,14 @@ class SqlPolicyServiceTest {
     }
 
     @Test
-    void rejectsLockingFileAndUnknownFunctionQueries() {
+    void rejectsLockingFileAndDatabaseLinkQueries() {
         assertRejected("SELECT id FROM users WHERE id = 1 FOR UPDATE", "LOCKING_SELECT_FORBIDDEN");
         assertRejected("SELECT * INTO OUTFILE '/tmp/x' FROM users", "SELECT_INTO_FORBIDDEN");
-        assertRejected("SELECT SLEEP(10) FROM users", "UNKNOWN_FUNCTION_FORBIDDEN");
         assertRejected("SELECT id FROM remote_users@prod WHERE id = 1", "DATABASE_LINK_FORBIDDEN");
     }
 
     @Test
-    void allowsRequestedDateFunctionsWithoutAllowingOtherFunctionsOrWrites() {
+    void allowsDateAndCustomFunctionsWithoutAllowingWrites() {
         for (DatabaseType type : new DatabaseType[] {
                 DatabaseType.MYSQL, DatabaseType.DRDS_MYSQL, DatabaseType.OCEANBASE_MYSQL}) {
             var analysis = policy.analyze(type,
@@ -84,12 +85,51 @@ class SqlPolicyServiceTest {
                             + "get_workday_minutes(?, ?) FROM orders WHERE id = ?", 100);
             assertThat(analysis.parameterCount()).isEqualTo(4);
         }
-        assertRejected("SELECT get_workday_minutes(SLEEP(5), ?) FROM orders",
-                "UNKNOWN_FUNCTION_FORBIDDEN");
-        assertRejected("SELECT get_workday_minutes_other(?, ?) FROM orders",
-                "UNKNOWN_FUNCTION_FORBIDDEN");
+        assertThat(policy.analyze(DatabaseType.MYSQL,
+                "SELECT get_workday_minutes(SLEEP(5), ?) FROM orders", 100).parameterCount()).isEqualTo(1);
+        assertThat(policy.analyze(DatabaseType.MYSQL,
+                "SELECT get_workday_minutes_other(?, ?) FROM orders", 100).parameterCount()).isEqualTo(2);
         assertRejected("UPDATE orders SET minutes = get_workday_minutes(?, ?)",
                 "ONLY_SINGLE_SELECT_ALLOWED");
+    }
+
+    @ParameterizedTest
+    @EnumSource(DatabaseType.class)
+    void acceptsAllFunctionNamesAndInspectsArguments(DatabaseType type) {
+        SqlAnalysis analysis = policy.analyze(type,
+                "WITH recent AS (SELECT app.custom_value(o.id, ?) AS value FROM app.orders o "
+                        + "WHERE custom_filter(o.status, ?) = 1) "
+                        + "SELECT custom_aggregate(nested_value(value, ?)) FROM recent "
+                        + "WHERE custom_match(value, ?) = 1 "
+                        + "HAVING custom_having(COUNT(*), ?) = 1 ORDER BY custom_sort(?)", 100);
+        assertThat(analysis.parameterCount()).isEqualTo(6);
+        assertThat(analysis.tables()).containsExactly("app.orders");
+        assertThat(analysis.schemas()).containsExactly("APP");
+        assertThat(analysis.fingerprint()).hasSize(64);
+        assertThat(policy.analyze(type,
+                "SELECT /*+ INDEX(o idx_orders) */ app.custom_value(?) FROM orders o WHERE id = ?",
+                100).parameterCount()).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @EnumSource(DatabaseType.class)
+    void unrestrictedFunctionsCannotHideForbiddenSqlStructures(DatabaseType type) {
+        for (String sql : java.util.List.of(
+                "SELECT custom_value(@@version) FROM orders",
+                "SELECT custom_value((SELECT id FROM orders FOR UPDATE)) FROM orders",
+                "SELECT custom_value((SELECT id INTO target_id FROM orders)) FROM orders",
+                "SELECT custom_value((SELECT id FROM remote_orders@prod)) FROM orders",
+                "SELECT custom_value(?) FROM orders; DELETE FROM orders",
+                "SELECT custom_value(?) /* comment */ FROM orders")) {
+            assertThatThrownBy(() -> policy.analyze(type, sql, 100))
+                    .as("%s: %s", type, sql).isInstanceOf(GatewayException.class);
+        }
+        SqlAnalysis analysis = policy.analyze(type,
+                "SELECT custom_value((SELECT MAX(id) FROM archive.orders WHERE id = ?)) "
+                        + "FROM app.orders WHERE id = ?", 500);
+        assertThat(analysis.parameterCount()).isEqualTo(2);
+        assertThat(analysis.tables()).containsExactlyInAnyOrder("app.orders", "archive.orders");
+        assertThat(analysis.riskReasons()).contains("CROSS_SCHEMA_QUERY", "MAX_ROWS_OVER_AUTO_LIMIT");
     }
 
     @Test
@@ -165,7 +205,6 @@ class SqlPolicyServiceTest {
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o /*! FOR UPDATE */",
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o; DELETE FROM orders",
                     "SELECT /*+ INDEX(o idx) */ id FROM orders o FOR UPDATE",
-                    "SELECT /*+ INDEX(o idx) */ SLEEP(1) FROM orders o",
                     "SELECT /*+ INDEX(o idx) */ @@version FROM orders o",
                     "SELECT /*+ INDEX(o idx) */ id INTO target_id FROM orders o",
                     "DELETE /*+ INDEX(o idx) */ FROM orders o",
@@ -187,7 +226,7 @@ class SqlPolicyServiceTest {
     }
 
     @Test
-    void managedAllowlistIsScopedAndStillRejectsHintEscapes() {
+    void legacyFunctionSettingsDoNotRestrictQueriesAndHintAllowlistRemainsScoped() {
         var settings = mock(com.tangguo.gateway.security.SettingService.class);
         var sources = mock(com.tangguo.gateway.datasource.DataSourceRepository.class);
         var values = new java.util.HashMap<String, String>();
@@ -203,8 +242,8 @@ class SqlPolicyServiceTest {
         assertThat(policy.analyze(DatabaseType.MYSQL,
                 "SELECT business_minutes(?) FROM orders WHERE id = ?", 100, "source-a").parameterCount())
                 .isEqualTo(2);
-        assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL,
-                "SELECT business_minutes(?) FROM orders", 100, "source-b")).isInstanceOf(GatewayException.class);
+        assertThat(policy.analyze(DatabaseType.MYSQL,
+                "SELECT business_minutes(?) FROM orders", 100, "source-b").parameterCount()).isEqualTo(1);
         rules.saveHints(DatabaseType.OCEANBASE_ORACLE, java.util.List.of("MATERIALIZE"));
         String sql = "WITH t AS (SELECT /*+ materialize */ id FROM orders WHERE id = ?) SELECT id FROM t";
         assertThat(policy.analyze(DatabaseType.OCEANBASE_ORACLE, sql, 100, "source-a").parameterCount()).isEqualTo(1);
@@ -222,9 +261,9 @@ class SqlPolicyServiceTest {
                     .isInstanceOf(GatewayException.class);
         }
         rules.saveFunctions("source-a", java.util.List.of());
-        assertThatThrownBy(() -> policy.analyze(DatabaseType.MYSQL,
-                "SELECT business_minutes(?) FROM orders", 100, "source-a")).isInstanceOf(GatewayException.class);
-        assertThatThrownBy(() -> rules.saveFunctions("source-a", java.util.List.of("LOAD_FILE")))
-                .isInstanceOf(GatewayException.class);
+        assertThat(policy.analyze(DatabaseType.MYSQL,
+                "SELECT business_minutes(?) FROM orders", 100, "source-a").parameterCount()).isEqualTo(1);
+        rules.saveFunctions("source-a", java.util.List.of("LOAD_FILE"));
+        assertThat(rules.functions("source-a")).containsExactly("LOAD_FILE");
     }
 }

@@ -204,14 +204,23 @@ class SqlPolicyMaliciousCorpusTest {
     }
 
     @ParameterizedTest(name = "{0}: {1}")
-    @MethodSource("unknownFunctionCases")
-    void rejectsUnknownOrSideEffectFunctions(DatabaseType databaseType, String label, String sql) {
-        assertRejectedWithCode(databaseType, sql, "UNKNOWN_FUNCTION_FORBIDDEN");
+    @MethodSource("unrestrictedFunctionCases")
+    void acceptsFunctionNamesWithoutExecutingThem(DatabaseType databaseType, String label, String sql) {
+        // 仅测试 AST 准入，不创建业务库连接，不执行具有副作用的函数。
+        assertThatCode(() -> policy.analyze(databaseType, sql, 100)).doesNotThrowAnyException();
     }
 
-    static Stream<Arguments> unknownFunctionCases() {
+    static Stream<Arguments> unrestrictedFunctionCases() {
         return Stream.of(
                 Arguments.of(DatabaseType.MYSQL, "sleep", "SELECT SLEEP(10) FROM app_user WHERE id = 1"),
+                Arguments.of(DatabaseType.MYSQL, "benchmark", "SELECT BENCHMARK(1, MD5('x'))"),
+                Arguments.of(DatabaseType.MYSQL, "get lock", "SELECT GET_LOCK('gateway_probe', 1)"),
+                Arguments.of(DatabaseType.MYSQL, "release lock", "SELECT RELEASE_LOCK('gateway_probe')"),
+                Arguments.of(DatabaseType.MYSQL, "release all locks", "SELECT RELEASE_ALL_LOCKS()"),
+                Arguments.of(DatabaseType.MYSQL, "nextval function", "SELECT NEXTVAL('gateway_sequence')"),
+                Arguments.of(DatabaseType.MYSQL, "setval function", "SELECT SETVAL('gateway_sequence', 1)"),
+                Arguments.of(DatabaseType.MYSQL, "sys exec", "SELECT SYS_EXEC('gateway_probe')"),
+                Arguments.of(DatabaseType.MYSQL, "sys eval", "SELECT SYS_EVAL('gateway_probe')"),
                 Arguments.of(
                         DatabaseType.MYSQL,
                         "load file",
